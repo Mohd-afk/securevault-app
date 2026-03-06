@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Search, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Shield, Lock, X, Settings } from 'lucide-react';
-import { getVaultItems, type VaultItem, type ItemType } from '../store';
+import { Plus, Search, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Shield, Lock, X, Settings as SettingsIcon } from 'lucide-react';
+import { getVaultItems, addVaultChangeListener, type VaultItem, type ItemType } from '../store';
+import type { User } from 'firebase/auth';
 
 const typeIcons: Record<ItemType, React.ReactNode> = {
   Website: <Globe className="w-5 h-5 text-cyan-400" />,
@@ -23,13 +24,28 @@ const typeColors: Record<ItemType, string> = {
 
 interface PasswordListProps {
   onLock: () => void;
+  onSignOut: () => void;
+  user: User;
 }
 
-export function PasswordList({ onLock }: PasswordListProps) {
+export function PasswordList({ onLock, user }: PasswordListProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const items = getVaultItems();
+  const [items, setItems] = useState<VaultItem[]>(getVaultItems());
+
+  // Listen for real-time vault changes (from Firestore sync)
+  useEffect(() => {
+    const unsubscribe = addVaultChangeListener((updatedItems) => {
+      setItems([...updatedItems]);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Also refresh items when component mounts or navigates back
+  useEffect(() => {
+    setItems(getVaultItems());
+  }, []);
 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items;
@@ -53,6 +69,9 @@ export function PasswordList({ onLock }: PasswordListProps) {
     return map;
   }, [filteredItems]);
 
+  // User initial for avatar
+  const userInitial = (user.displayName?.[0] || user.email?.[0] || 'U').toUpperCase();
+
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* Header */}
@@ -75,7 +94,7 @@ export function PasswordList({ onLock }: PasswordListProps) {
               onClick={() => navigate('/settings')}
               className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
             >
-              <Settings className="w-5 h-5" />
+              <SettingsIcon className="w-5 h-5" />
             </button>
             <button
               onClick={onLock}
@@ -83,6 +102,13 @@ export function PasswordList({ onLock }: PasswordListProps) {
             >
               <Lock className="w-5 h-5" />
             </button>
+            {/* User avatar */}
+            <div
+              className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center cursor-default"
+              title={user.email ?? 'Signed in'}
+            >
+              <span className="text-cyan-400 text-xs font-medium">{userInitial}</span>
+            </div>
           </div>
         </div>
 

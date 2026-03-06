@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Lock, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Shield, Eye, EyeOff, KeyRound, LogOut, RefreshCcw } from 'lucide-react';
 import {
   hasMasterPassword,
   setupMasterPassword,
@@ -7,19 +7,43 @@ import {
   seedSampleData,
   unlockVault,
   setSessionPassword,
+  hasMasterPasswordAsync,
+  migrateLocalToCloud,
+  resetVault,
 } from '../store';
+import { useEffect } from 'react';
 
 interface LockScreenProps {
   onUnlock: () => void;
+  userEmail?: string;
+  onSignOut?: () => void;
 }
 
-export function LockScreen({ onUnlock }: LockScreenProps) {
-  const isSetup = !hasMasterPassword();
+export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) {
+  const [isSetup, setIsSetup] = useState<boolean | null>(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Check if the user has a master password (cloud-aware)
+  useEffect(() => {
+    let cancelled = false;
+    hasMasterPasswordAsync().then((has) => {
+      if (!cancelled) setIsSetup(!has);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Show loader while checking
+  if (isSetup === null) {
+    return (
+      <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +72,8 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
         const valid = await verifyMasterPassword(password);
         if (valid) {
           await unlockVault(password);
+          // Migrate any local-only data to cloud
+          await migrateLocalToCloud();
           onUnlock();
         } else {
           setError('Incorrect master password');
@@ -68,6 +94,12 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
             <Shield className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-white mb-1">SecureVault</h1>
+
+          {/* User email */}
+          {userEmail && (
+            <p className="text-cyan-400 text-xs mt-0.5 mb-1">{userEmail}</p>
+          )}
+
           <p className="text-gray-400 text-sm">
             {isSetup ? 'Set up your master password' : 'Enter your master password'}
           </p>
@@ -103,7 +135,7 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
             <div>
               <label className="text-gray-400 text-xs mb-1.5 block">Confirm Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
+                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
@@ -133,6 +165,40 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
             This password encrypts your vault. If you forget it, your data cannot be recovered.
           </p>
         )}
+
+        {/* Sign out & Reset links */}
+        <div className="mt-8 flex flex-col items-center gap-4">
+          {onSignOut && (
+            <button
+              onClick={onSignOut}
+              className="flex items-center gap-2 text-gray-500 text-xs hover:text-gray-300 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sign out and switch account
+            </button>
+          )}
+
+          {!isSetup && (
+            <button
+              onClick={async () => {
+                if (window.confirm('Are you sure? This will PERMANENTLY delete all your cloud and local vault data. There is no way to recover it.')) {
+                  setLoading(true);
+                  try {
+                    await resetVault();
+                    window.location.reload();
+                  } catch (e) {
+                    setError('Failed to reset vault. Please check your connection.');
+                  }
+                  setLoading(false);
+                }
+              }}
+              className="flex items-center gap-2 text-red-500/60 text-[10px] uppercase tracking-wider hover:text-red-400 transition-colors"
+            >
+              <RefreshCcw className="w-3 h-3" />
+              Reset Vault (Data Loss!)
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

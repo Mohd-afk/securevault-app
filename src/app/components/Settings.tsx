@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock } from 'lucide-react';
-import { getSettings, saveSettings, changeMasterPassword, type AppSettings } from '../store';
+import { useState, useRef } from 'react';
+import { useNavigate, useOutletContext } from 'react-router';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, LogOut, FileText } from 'lucide-react';
+import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, type AppSettings, type ItemType } from '../store';
+import { signOut } from '../auth';
+import { toast } from 'sonner';
+import type { User } from 'firebase/auth';
 
 const TIMEOUT_OPTIONS = [
     { label: '1 minute', value: 1 },
@@ -12,8 +15,15 @@ const TIMEOUT_OPTIONS = [
     { label: 'Never', value: 0 },
 ];
 
+interface OutletContext {
+    onLock: () => void;
+    onSignOut: () => void;
+    user: User;
+}
+
 export function Settings() {
     const navigate = useNavigate();
+    const { onSignOut, user } = useOutletContext<OutletContext>();
     const [settings, setSettings] = useState<AppSettings>(getSettings);
 
     // Password change form
@@ -28,6 +38,14 @@ export function Settings() {
 
     // Timeout dropdown
     const [showTimeoutDropdown, setShowTimeoutDropdown] = useState(false);
+
+    // CSV import
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [importing, setImporting] = useState(false);
+    const [importPreview, setImportPreview] = useState<{
+        count: number;
+        items: Array<{ title: string; username: string; password: string; url: string }>;
+    } | null>(null);
 
     const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
         const updated = { ...settings, [key]: value };
@@ -71,6 +89,145 @@ export function Settings() {
         setChangingPassword(false);
     };
 
+    // ── CSV Import ───────────────────────────────────────────────────
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const text = event.target?.result as string;
+            parseCsv(text);
+        };
+        reader.readAsText(file);
+
+        // Reset input so the same file can be selected again
+        e.target.value = '';
+    };
+
+    const parseCsv = (text: string) => {
+        const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+        if (lines.length < 2) {
+            toast.error('CSV file appears to be empty');
+            return;
+        }
+
+        // Parse header
+        const header = lines[0].toLowerCase().split(',').map((h) => h.trim().replace(/"/g, ''));
+
+        // Find column indices — support multiple CSV formats
+        const nameIdx = header.findIndex((h) => ['name', 'title', 'site', 'site name'].includes(h));
+        const urlIdx = header.findIndex((h) => ['url', 'website', 'login_uri', 'login uri'].includes(h));
+        const usernameIdx = header.findIndex((h) => ['username', 'user', 'login_username', 'login username', 'email'].includes(h));
+        const passwordIdx = header.findIndex((h) => ['password', 'login_password', 'login password'].includes(h));
+
+        if (passwordIdx === -1) {
+            toast.error('CSV file must have a "password" column');
+            return;
+        }
+
+        const parsed: Array<{ title: string; username: string; password: string; url: string }> = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = parseCsvLine(lines[i]);
+            const pw = values[passwordIdx]?.trim();
+            if (!pw) continue;
+
+            const url = urlIdx !== -1 ? values[urlIdx]?.trim() ?? '' : '';
+            let title = nameIdx !== -1 ? values[nameIdx]?.trim() ?? '' : '';
+
+            // If no title, derive from URL
+            if (!title && url) {
+                try {
+                    title = new URL(url).hostname.replace('www.', '');
+                } catch {
+                    title = url;
+                }
+            }
+            if (!title) title = `Import ${i}`;
+
+            parsed.push({
+                title,
+                username: usernameIdx !== -1 ? values[usernameIdx]?.trim() ?? '' : '',
+                password: pw,
+                url,
+            });
+        }
+
+        if (parsed.length === 0) {
+            toast.error('No valid entries found in CSV');
+            return;
+        }
+
+        setImportPreview({ count: parsed.length, items: parsed });
+    };
+
+    // Simple CSV line parser that handles quoted fields
+    const parseCsvLine = (line: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current);
+        return result;
+    };
+
+    const confirmImport = async () => {
+        if (!importPreview) return;
+        setImporting(true);
+
+        try {
+            const vaultItems = importPreview.items.map((item) => {
+                // Guess the type from the URL
+                let type: ItemType = 'Other';
+                if (item.url) {
+                    type = 'Website';
+                }
+                return {
+                    title: item.title,
+                    username: item.username,
+                    password: item.password,
+                    type,
+                    url: item.url,
+                    note: '',
+                };
+            });
+
+            const count = await bulkAddVaultItems(vaultItems);
+            toast.success(`Successfully imported ${count} passwords`);
+            setImportPreview(null);
+        } catch {
+            toast.error('Failed to import passwords');
+        }
+        setImporting(false);
+    };
+
+    const handleSignOut = async () => {
+        try {
+            await signOut();
+            onSignOut();
+        } catch {
+            toast.error('Failed to sign out');
+        }
+    };
+
     const currentTimeoutLabel = TIMEOUT_OPTIONS.find((o) => o.value === settings.autoLockTimeout)?.label ?? '5 minutes';
 
     return (
@@ -87,6 +244,33 @@ export function Settings() {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+                {/* Account Section */}
+                <div>
+                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Account</span>
+                    <div className="bg-[#16213e] rounded-xl p-4 space-y-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center">
+                                <span className="text-cyan-400 text-sm font-medium">
+                                    {(user.displayName?.[0] || user.email?.[0] || 'U').toUpperCase()}
+                                </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                {user.displayName && (
+                                    <p className="text-white text-sm truncate">{user.displayName}</p>
+                                )}
+                                <p className="text-gray-400 text-xs truncate">{user.email}</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleSignOut}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors text-sm"
+                        >
+                            <LogOut className="w-4 h-4" />
+                            Sign Out
+                        </button>
+                    </div>
+                </div>
+
                 {/* Security Section */}
                 <div>
                     <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Security</span>
@@ -233,13 +417,82 @@ export function Settings() {
                     </div>
                 </div>
 
+                {/* Data Section — CSV Import */}
+                <div>
+                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Data</span>
+                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                        <div>
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={importing}
+                                className="w-full flex items-center gap-3"
+                            >
+                                <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                    <Upload className="w-4 h-4 text-purple-400" />
+                                </div>
+                                <div className="text-left">
+                                    <span className="text-white text-sm block">Import Passwords</span>
+                                    <span className="text-gray-500 text-xs">From Chrome CSV export</span>
+                                </div>
+                            </button>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".csv"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                            />
+                        </div>
+
+                        {/* Import Preview */}
+                        {importPreview && (
+                            <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-cyan-400" />
+                                    <p className="text-white text-sm">
+                                        Found <span className="text-cyan-400 font-medium">{importPreview.count}</span> passwords
+                                    </p>
+                                </div>
+
+                                {/* Preview first few items */}
+                                <div className="bg-[#1a1a2e] rounded-xl p-3 max-h-32 overflow-y-auto space-y-1.5">
+                                    {importPreview.items.slice(0, 5).map((item, i) => (
+                                        <p key={i} className="text-gray-400 text-xs truncate">
+                                            {item.title} — {item.username || 'no username'}
+                                        </p>
+                                    ))}
+                                    {importPreview.count > 5 && (
+                                        <p className="text-gray-500 text-xs">...and {importPreview.count - 5} more</p>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setImportPreview(null)}
+                                        className="flex-1 py-2.5 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors text-sm"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={confirmImport}
+                                        disabled={importing}
+                                        className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2.5 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg shadow-cyan-500/20 text-sm"
+                                    >
+                                        {importing ? 'Importing...' : 'Import All'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 {/* App Info */}
                 <div>
                     <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">About</span>
                     <div className="bg-[#16213e] rounded-xl p-4 space-y-2">
                         <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">Version</span>
-                            <span className="text-gray-300 text-xs">1.0.0</span>
+                            <span className="text-gray-300 text-xs">2.0.0</span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">Encryption</span>
@@ -248,6 +501,10 @@ export function Settings() {
                         <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">Key Derivation</span>
                             <span className="text-gray-300 text-xs">PBKDF2 (600K iterations)</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-500 text-xs">Cloud Sync</span>
+                            <span className="text-green-400 text-xs">● Active</span>
                         </div>
                     </div>
                 </div>
