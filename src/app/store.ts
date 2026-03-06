@@ -1,8 +1,7 @@
 import {
-  encrypt,
-  decrypt,
-  hashPasswordForVerification,
-  generateSalt,
+  deriveEncryptionKey,
+  encryptWithKey,
+  decryptWithKey,
   type EncryptedPayload,
 } from './crypto';
 import { getCurrentUser } from './auth';
@@ -39,7 +38,6 @@ export interface AppSettings {
 // ── Storage keys ─────────────────────────────────────────────────────
 
 const VAULT_KEY = 'securevault_items';
-const MASTER_KEY = 'securevault_master_hash';
 const SETTINGS_KEY = 'securevault_settings';
 
 // ── In-memory session state ──────────────────────────────────────────
@@ -72,7 +70,6 @@ export function clearSession(): void {
  */
 export function clearLocalVaultData(): void {
   localStorage.removeItem(VAULT_KEY);
-  localStorage.removeItem(MASTER_KEY);
   localStorage.removeItem(SETTINGS_KEY);
 }
 
@@ -104,103 +101,94 @@ function generateId(): string {
     : Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
-// ── Helper: get current user's UID ───────────────────────────────────
+// ── Helper: get current user's UID and Email ─────────────────────────
 
 function getUid(): string | null {
   return getCurrentUser()?.uid ?? null;
 }
 
-// ── Master password (PBKDF2) ─────────────────────────────────────────
-
-interface StoredMasterHash {
-  hash: string;
-  salt: string; // base64
+export function getUserEmail(): string {
+  return getCurrentUser()?.email ?? '';
 }
 
-export async function setupMasterPassword(password: string): Promise<void> {
-  const salt = generateSalt();
-  const hash = await hashPasswordForVerification(password, salt);
-  const saltBase64 = btoa(String.fromCharCode(...salt));
+// ── Master Password Setup & Verification ─────────────────────────────
 
-  const stored: StoredMasterHash = { hash, salt: saltBase64 };
-  const storedJson = JSON.stringify(stored);
-  localStorage.setItem(MASTER_KEY, storedJson);
+export async function setupInitialVault(password: string): Promise<void> {
+  const email = getUserEmail();
+  if (!email) throw new Error("No user email available for key derivation");
 
-  // Also save to cloud
+  // Save an empty vault to cloud (this initializes their cloud data)
+  const key = await deriveEncryptionKey(password, email);
+  const emptyPayload = await encryptWithKey('[]', key);
+
+  localStorage.setItem(VAULT_KEY, JSON.stringify(emptyPayload));
+
   const uid = getUid();
   if (uid) {
     try {
-      // Save an empty vault to cloud with the master hash
-      const emptyPayload = await encrypt('[]', password);
-      await saveVaultToCloud(uid, emptyPayload, storedJson);
+      await saveVaultToCloud(uid, emptyPayload, "legacy_hash_removed");
     } catch (e) {
-      console.error('Failed to save master hash to cloud:', e);
+      console.error('Failed to save empty vault to cloud:', e);
     }
   }
 }
 
 export async function verifyMasterPassword(password: string): Promise<boolean> {
-  // Try loading from cloud first, then fall back to local
-  const uid = getUid();
-  let storedJson: string | null = null;
+  const email = getUserEmail();
+  if (!email) return false;
 
+  const uid = getUid();
+  let encryptedDataRaw: string | null = null;
+
+  // Try loading from cloud first
   if (uid) {
     try {
       const cloudData = await loadVaultFromCloud(uid);
-      if (cloudData?.masterHash) {
-        storedJson = cloudData.masterHash;
-        // Also update local cache
-        localStorage.setItem(MASTER_KEY, storedJson);
+      if (cloudData?.encryptedPayload) {
+        encryptedDataRaw = JSON.stringify(cloudData.encryptedPayload);
+        localStorage.setItem(VAULT_KEY, encryptedDataRaw);
       }
     } catch (e) {
-      console.error('Failed to load master hash from cloud:', e);
+      console.error('Failed to load vault from cloud:', e);
     }
   }
 
-  // Only fall back to localStorage if there's NO authenticated user
-  // (prevents stale data from a different user being used)
-  if (!storedJson && !uid) {
-    storedJson = localStorage.getItem(MASTER_KEY);
+  // Fallback to local
+  if (!encryptedDataRaw) {
+    encryptedDataRaw = localStorage.getItem(VAULT_KEY);
   }
 
-  if (!storedJson) return false;
+  if (!encryptedDataRaw) return false;
 
   try {
-    const stored: StoredMasterHash = JSON.parse(storedJson);
-    const saltBytes = new Uint8Array(
-      atob(stored.salt)
-        .split('')
-        .map((c) => c.charCodeAt(0)),
-    );
-    const hash = await hashPasswordForVerification(password, saltBytes);
-    return hash === stored.hash;
+    const payload: EncryptedPayload = JSON.parse(encryptedDataRaw);
+    if (!payload.ciphertext || !payload.iv) return false;
+
+    // Attempt decryption
+    const key = await deriveEncryptionKey(password, email);
+    await decryptWithKey(payload, key);
+    return true; // Decryption succeeded!
   } catch {
-    return false;
+    return false; // Decryption failed = wrong password
   }
 }
 
-export function hasMasterPassword(): boolean {
-  return !!localStorage.getItem(MASTER_KEY);
-}
-
-export async function hasMasterPasswordAsync(): Promise<boolean> {
-  // Check cloud first
+export async function hasConfiguredVault(): Promise<boolean> {
   const uid = getUid();
   if (uid) {
     try {
       const cloudData = await loadVaultFromCloud(uid);
-      if (cloudData?.masterHash) {
-        localStorage.setItem(MASTER_KEY, cloudData.masterHash);
+      if (cloudData?.encryptedPayload) {
+        localStorage.setItem(VAULT_KEY, JSON.stringify(cloudData.encryptedPayload));
         return true;
       }
-      // Cloud user has no data → this is a NEW user.
-      // Don't fall back to localStorage (it may have stale data from another user).
-      return false;
+      return false; // New user, no data
     } catch {
-      // Network error — fall through to local check as backup
+      // Ignore network errors
+      console.error("Network error checking vault status");
     }
   }
-  return !!localStorage.getItem(MASTER_KEY);
+  return !!localStorage.getItem(VAULT_KEY);
 }
 
 // ── Encrypted vault local ops ────────────────────────────────────────
@@ -208,18 +196,15 @@ export async function hasMasterPasswordAsync(): Promise<boolean> {
 async function loadVaultFromStorage(password: string): Promise<VaultItem[]> {
   const raw = localStorage.getItem(VAULT_KEY);
   if (!raw) return [];
+  const email = getUserEmail();
+  if (!email) return [];
 
   try {
     const payload: EncryptedPayload = JSON.parse(raw);
-    if (payload.ciphertext && payload.salt && payload.iv) {
-      const plaintext = await decrypt(payload, password);
+    if (payload.ciphertext && payload.iv) {
+      const key = await deriveEncryptionKey(password, email);
+      const plaintext = await decryptWithKey(payload, key);
       return JSON.parse(plaintext);
-    }
-    // Fallback: legacy unencrypted data
-    const legacyItems = JSON.parse(raw);
-    if (Array.isArray(legacyItems)) {
-      await saveVaultToStorage(legacyItems, password);
-      return legacyItems;
     }
     return [];
   } catch {
@@ -228,16 +213,24 @@ async function loadVaultFromStorage(password: string): Promise<VaultItem[]> {
 }
 
 async function saveVaultToStorage(items: VaultItem[], password: string): Promise<void> {
+  const email = getUserEmail();
+  if (!email) return;
+
+  const key = await deriveEncryptionKey(password, email);
   const plaintext = JSON.stringify(items);
-  const payload = await encrypt(plaintext, password);
+  const payload = await encryptWithKey(plaintext, key);
   localStorage.setItem(VAULT_KEY, JSON.stringify(payload));
 }
 
 // ── Cloud-synced save ────────────────────────────────────────────────
 
 async function saveVaultEverywhere(items: VaultItem[], password: string): Promise<void> {
+  const email = getUserEmail();
+  if (!email) return;
+
+  const key = await deriveEncryptionKey(password, email);
   const plaintext = JSON.stringify(items);
-  const payload = await encrypt(plaintext, password);
+  const payload = await encryptWithKey(plaintext, key);
 
   // Save locally
   localStorage.setItem(VAULT_KEY, JSON.stringify(payload));
@@ -245,10 +238,9 @@ async function saveVaultEverywhere(items: VaultItem[], password: string): Promis
   // Save to cloud
   const uid = getUid();
   if (uid) {
-    const masterHash = localStorage.getItem(MASTER_KEY) ?? '';
     _suppressNextSync = true;
     try {
-      await saveVaultToCloud(uid, payload, masterHash);
+      await saveVaultToCloud(uid, payload, "legacy_hash_removed");
     } catch (e) {
       console.error('Failed to save vault to cloud:', e);
     }
@@ -259,18 +251,19 @@ async function saveVaultEverywhere(items: VaultItem[], password: string): Promis
 
 export async function unlockVault(password: string): Promise<VaultItem[]> {
   const uid = getUid();
+  const email = getUserEmail();
   let items: VaultItem[] = [];
 
   // Try cloud first
-  if (uid) {
+  if (uid && email) {
     try {
       const cloudData = await loadVaultFromCloud(uid);
       if (cloudData?.encryptedPayload) {
-        const plaintext = await decrypt(cloudData.encryptedPayload, password);
+        const key = await deriveEncryptionKey(password, email);
+        const plaintext = await decryptWithKey(cloudData.encryptedPayload, key);
         items = JSON.parse(plaintext);
         // Update local cache
         localStorage.setItem(VAULT_KEY, JSON.stringify(cloudData.encryptedPayload));
-        localStorage.setItem(MASTER_KEY, cloudData.masterHash);
       }
     } catch (e) {
       console.error('Failed to load vault from cloud, falling back to local:', e);
@@ -298,7 +291,8 @@ function startRealtimeSync(uid: string | null, password: string): void {
     _unsubscribeVault = null;
   }
 
-  if (!uid) return;
+  const email = getUserEmail();
+  if (!uid || !email) return;
 
   _unsubscribeVault = subscribeToVault(uid, async (data) => {
     if (!data || !_sessionPassword) return;
@@ -310,7 +304,8 @@ function startRealtimeSync(uid: string | null, password: string): void {
     }
 
     try {
-      const plaintext = await decrypt(data.encryptedPayload, password);
+      const key = await deriveEncryptionKey(password, email);
+      const plaintext = await decryptWithKey(data.encryptedPayload, key);
       const items: VaultItem[] = JSON.parse(plaintext);
       _cachedItems = items;
       // Update local cache
@@ -475,21 +470,16 @@ export function saveSettings(settings: AppSettings): void {
 
 // ── Master password change ───────────────────────────────────────────
 
+// Re-encrypts existing data with a new master password, usually done after reset or manual change
 export async function changeMasterPassword(
-  currentPassword: string,
   newPassword: string,
 ): Promise<boolean> {
-  const isValid = await verifyMasterPassword(currentPassword);
-  if (!isValid) return false;
-
-  // Re-encrypt vault with new password
-  const items = _cachedItems ?? await loadVaultFromStorage(currentPassword);
-  await setupMasterPassword(newPassword);
+  // Try to load items using currently cached ones. 
+  const items = _cachedItems || [];
+  await setupInitialVault(newPassword);
   await saveVaultEverywhere(items, newPassword);
 
-  // Update session
   _sessionPassword = newPassword;
-  _cachedItems = items;
   return true;
 }
 
@@ -526,4 +516,3 @@ export async function resetVault(): Promise<void> {
   clearSession();
   clearLocalVaultData();
 }
-

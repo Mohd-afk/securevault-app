@@ -1,43 +1,73 @@
 // ─── SecureVault Auth Module ─────────────────────────────────────────
-// Wraps Firebase Auth for email+password with verification and Google Sign-In.
+// Wraps Firebase Auth for email logic (passwordless + derived keys) and Google Sign-In.
 // ─────────────────────────────────────────────────────────────────────
 
 import {
-    createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signInWithPopup,
     GoogleAuthProvider,
-    sendEmailVerification,
     signOut as firebaseSignOut,
     onAuthStateChanged,
+    sendSignInLinkToEmail,
+    isSignInWithEmailLink,
+    signInWithEmailLink,
+    updatePassword,
+    sendPasswordResetEmail,
     type User,
 } from 'firebase/auth';
 import { auth } from './firebase';
 
-// ── Email + Password ─────────────────────────────────────────────────
+// ── Email Links (Flow 1 & 3) ─────────────────────────────────────────
 
-export async function signUpWithEmail(
-    email: string,
-    password: string,
-): Promise<User> {
-    const credential = await createUserWithEmailAndPassword(auth, email, password);
-    await sendEmailVerification(credential.user);
-    return credential.user;
+export async function sendPasswordlessVerificationLink(email: string): Promise<void> {
+    const actionCodeSettings = {
+        // Automatically redirects back to app, needs to match Firebase console config
+        url: window.location.origin,
+        handleCodeInApp: true,
+    };
+    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    // Save email locally to complete sign-in without asking again
+    window.localStorage.setItem('emailForSignIn', email);
 }
 
-export async function signInWithEmail(
-    email: string,
-    password: string,
-): Promise<User> {
-    const credential = await signInWithEmailAndPassword(auth, email, password);
-    return credential.user;
+export function isVerificationLink(href: string): boolean {
+    return isSignInWithEmailLink(auth, href);
 }
 
-export async function resendVerificationEmail(): Promise<void> {
-    const user = auth.currentUser;
-    if (user && !user.emailVerified) {
-        await sendEmailVerification(user);
+export async function finishPasswordlessSignIn(href: string): Promise<User> {
+    let email = window.localStorage.getItem('emailForSignIn');
+    if (!email) {
+        // Fallback if the user opens the link on a different device or browser
+        email = window.prompt('Please provide your email for confirmation');
     }
+    if (!email) throw new Error('Email is required to complete sign-in.');
+
+    const result = await signInWithEmailLink(auth, email, href);
+    window.localStorage.removeItem('emailForSignIn');
+    return result.user;
+}
+
+export async function finalizeMasterPasswordSetup(authKey: string): Promise<User> {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No user is currently signed in to set the password.');
+    await updatePassword(user, authKey);
+    return user;
+}
+
+export async function sendResetEmail(email: string): Promise<void> {
+    // Send a standard Firebase reset email OR standard magic link if we repurpose it
+    // For now we'll send a magic link, treating it the same as Sign Up
+    await sendPasswordlessVerificationLink(email);
+}
+
+// ── Master Password Auth (Flow 2) ────────────────────────────────────
+
+export async function signInWithDerivedKey(
+    email: string,
+    authKey: string,
+): Promise<User> {
+    const credential = await signInWithEmailAndPassword(auth, email, authKey);
+    return credential.user;
 }
 
 // ── Google Sign-In ───────────────────────────────────────────────────
@@ -67,15 +97,4 @@ export function onAuthChange(
 
 export function getCurrentUser(): User | null {
     return auth.currentUser;
-}
-
-// ── Reload user to check email verification ──────────────────────────
-
-export async function reloadUser(): Promise<User | null> {
-    const user = auth.currentUser;
-    if (user) {
-        await user.reload();
-        return auth.currentUser;
-    }
-    return null;
 }

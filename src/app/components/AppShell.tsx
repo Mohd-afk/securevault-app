@@ -3,7 +3,7 @@ import { Outlet } from 'react-router';
 import { LockScreen } from './LockScreen';
 import { AuthScreen } from './AuthScreen';
 import { getSettings, clearSession, clearLocalVaultData } from '../store';
-import { onAuthChange, signOut } from '../auth';
+import { onAuthChange, signOut, isVerificationLink } from '../auth';
 import { auth } from '../firebase';
 import type { User } from 'firebase/auth';
 
@@ -11,8 +11,17 @@ export function AppShell() {
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [unlocked, setUnlocked] = useState(false);
+  const [magicLinkActive, setMagicLinkActive] = useState(false);
+
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Check on mount if we're entering via a magic link
+  useEffect(() => {
+    if (isVerificationLink(window.location.href)) {
+      setMagicLinkActive(true);
+    }
+  }, []);
 
   // ── Auth state listener ────────────────────────────────────────────
   useEffect(() => {
@@ -39,6 +48,8 @@ export function AppShell() {
   }, []);
 
   const handleSignOut = useCallback(async () => {
+    // If we were processing a magic link but decided to sign out
+    setMagicLinkActive(false);
     clearSession();
     clearLocalVaultData();
     setUnlocked(false);
@@ -110,12 +121,15 @@ export function AppShell() {
     );
   }
 
-  // ── Gate 1: Auth ─────────────────────────────────────────────────
-  if (!user) {
+  // ── Gate 1: Auth & Magic Links ───────────────────────────────────
+  // If no user, OR we are actively processing a magic link setup
+  if (!user || magicLinkActive) {
     return <AuthScreen onAuthenticated={() => {
+      // Completed full login or magic link setup
+      setMagicLinkActive(false);
       clearLocalVaultData();
-      clearSession();
       setUser(auth.currentUser);
+      setUnlocked(true); // Don't require double-prompting the password
     }} />;
   }
 

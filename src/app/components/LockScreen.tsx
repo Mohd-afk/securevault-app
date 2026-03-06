@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { Shield, Eye, EyeOff, KeyRound, LogOut, RefreshCcw } from 'lucide-react';
 import {
-  hasMasterPassword,
-  setupMasterPassword,
+  hasConfiguredVault,
+  setupInitialVault,
   verifyMasterPassword,
   unlockVault,
   setSessionPassword,
-  hasMasterPasswordAsync,
   migrateLocalToCloud,
   resetVault,
 } from '../store';
@@ -26,10 +25,10 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Check if the user has a master password (cloud-aware)
+  // Check if the user has a configured vault
   useEffect(() => {
     let cancelled = false;
-    hasMasterPasswordAsync().then((has) => {
+    hasConfiguredVault().then((has) => {
       if (!cancelled) setIsSetup(!has);
     });
     return () => { cancelled = true; };
@@ -52,8 +51,8 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
     try {
       if (isSetup) {
         // ── First-time setup ──────────────────────────────────
-        if (password.length < 4) {
-          setError('Master password must be at least 4 characters');
+        if (password.length < 8) {
+          setError('Master password must be at least 8 characters');
           setLoading(false);
           return;
         }
@@ -62,7 +61,7 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
           setLoading(false);
           return;
         }
-        await setupMasterPassword(password);
+        await setupInitialVault(password);
         setSessionPassword(password);
         onUnlock();
       } else {
