@@ -12,5 +12,14 @@
         "destination": "/index.html"
       }
     ]
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "SecureVault",
+        "supportEmail": "mohdjamal1110@gmail.com"
+      }
+    }
   }
 }

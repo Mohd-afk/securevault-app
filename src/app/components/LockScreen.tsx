@@ -4,7 +4,6 @@ import {
   hasMasterPassword,
   setupMasterPassword,
   verifyMasterPassword,
-  seedSampleData,
   unlockVault,
   setSessionPassword,
   hasMasterPasswordAsync,
@@ -64,7 +63,6 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
           return;
         }
         await setupMasterPassword(password);
-        await seedSampleData(password);
         setSessionPassword(password);
         onUnlock();
       } else {

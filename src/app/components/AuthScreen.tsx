@@ -8,6 +8,8 @@ import {
     ArrowRight,
     RefreshCw,
     CheckCircle,
+    Check,
+    X,
 } from 'lucide-react';
 import {
     signUpWithEmail,
@@ -18,6 +20,51 @@ import {
 } from '../auth';
 
 type AuthMode = 'signin' | 'signup' | 'verify';
+
+// ── Password strength validation ────────────────────────────────────
+
+interface PasswordCheck {
+    label: string;
+    passed: boolean;
+}
+
+function validatePassword(password: string): PasswordCheck[] {
+    return [
+        { label: 'At least 8 characters', passed: password.length >= 8 },
+        { label: 'One uppercase letter (A-Z)', passed: /[A-Z]/.test(password) },
+        { label: 'One lowercase letter (a-z)', passed: /[a-z]/.test(password) },
+        { label: 'One number (0-9)', passed: /[0-9]/.test(password) },
+        { label: 'One special character (!@#$...)', passed: /[!@#$%^&*()_+\-=\[\]{}|;':",./<>?\\`~]/.test(password) },
+    ];
+}
+
+function isPasswordStrong(password: string): boolean {
+    return validatePassword(password).every((c) => c.passed);
+}
+
+function PasswordStrengthIndicator({ password }: { password: string }) {
+    const checks = validatePassword(password);
+    if (!password) return null;
+
+    return (
+        <div className="space-y-1.5 pt-1">
+            {checks.map((check) => (
+                <div key={check.label} className="flex items-center gap-2 text-xs">
+                    {check.passed ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                        <X className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    )}
+                    <span className={check.passed ? 'text-emerald-400' : 'text-red-400'}>
+                        {check.label}
+                    </span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ── Component ────────────────────────────────────────────────────────
 
 interface AuthScreenProps {
     onAuthenticated: () => void;
@@ -37,6 +84,13 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const handleEmailAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+
+        // Enforce strong password on signup
+        if (mode === 'signup' && !isPasswordStrong(password)) {
+            setError('Please fix all password requirements below.');
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -63,11 +117,15 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             } else if (message.includes('auth/user-not-found')) {
                 setError('No account found with this email.');
             } else if (message.includes('auth/weak-password')) {
-                setError('Password must be at least 6 characters.');
+                setError('Password does not meet the strength requirements.');
             } else if (message.includes('auth/invalid-email')) {
                 setError('Please enter a valid email address.');
             } else if (message.includes('auth/too-many-requests')) {
                 setError('Too many attempts. Please try again later.');
+            } else if (message.includes('auth/operation-not-allowed')) {
+                setError('Email/Password sign-in is not enabled. Please contact the admin.');
+            } else if (message.includes('auth/unauthorized-domain')) {
+                setError('This domain is not authorized. Please contact the admin.');
             } else {
                 setError(message);
             }
@@ -120,6 +178,11 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         }
         setLoading(false);
     };
+
+    // Is the submit button disabled?
+    const isSubmitDisabled =
+        loading || !email || !password ||
+        (mode === 'signup' && !isPasswordStrong(password));
 
     // ── Verify Email Screen ──────────────────────────────────────────
     if (mode === 'verify') {
@@ -210,6 +273,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="Enter your email"
+                                pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
+                                title="Please enter a valid email address (e.g. name@example.com)"
                                 className="w-full bg-[#16213e] border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors"
                                 autoFocus
                                 required
@@ -226,7 +291,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                                 type={showPassword ? 'text' : 'password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder={mode === 'signup' ? 'Create a password (min 6 chars)' : 'Enter your password'}
+                                placeholder={mode === 'signup' ? 'Create a strong password' : 'Enter your password'}
                                 className="w-full bg-[#16213e] border border-gray-700 rounded-xl py-3 pl-10 pr-11 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors"
                                 required
                             />
@@ -238,6 +303,11 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                                 {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
                             </button>
                         </div>
+
+                        {/* Password strength indicator (signup only) */}
+                        {mode === 'signup' && (
+                            <PasswordStrengthIndicator password={password} />
+                        )}
                     </div>
 
                     {error && (
@@ -246,7 +316,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
                     <button
                         type="submit"
-                        disabled={loading || !email || !password}
+                        disabled={isSubmitDisabled}
                         className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2"
                     >
                         {loading ? (
@@ -286,6 +356,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                         onClick={() => {
                             setMode(mode === 'signin' ? 'signup' : 'signin');
                             setError('');
+                            setPassword('');
                         }}
                         className="text-gray-400 text-sm hover:text-cyan-400 transition-colors"
                     >

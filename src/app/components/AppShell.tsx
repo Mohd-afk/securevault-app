@@ -4,6 +4,7 @@ import { LockScreen } from './LockScreen';
 import { AuthScreen } from './AuthScreen';
 import { getSettings, clearSession, clearLocalVaultData } from '../store';
 import { onAuthChange, signOut } from '../auth';
+import { auth } from '../firebase';
 import type { User } from 'firebase/auth';
 
 export function AppShell() {
@@ -16,6 +17,11 @@ export function AppShell() {
   // ── Auth state listener ────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onAuthChange((firebaseUser) => {
+      // If switching to a DIFFERENT user, clear stale local data
+      if (firebaseUser && user && firebaseUser.uid !== user.uid) {
+        clearLocalVaultData();
+        clearSession();
+      }
       setUser(firebaseUser);
       setAuthLoading(false);
       // If user signs out, reset unlock state
@@ -25,7 +31,7 @@ export function AppShell() {
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const handleLock = useCallback(() => {
     clearSession();
@@ -106,7 +112,11 @@ export function AppShell() {
 
   // ── Gate 1: Auth ─────────────────────────────────────────────────
   if (!user) {
-    return <AuthScreen onAuthenticated={() => { }} />;
+    return <AuthScreen onAuthenticated={() => {
+      clearLocalVaultData();
+      clearSession();
+      setUser(auth.currentUser);
+    }} />;
   }
 
   // ── Gate 2: Lock ─────────────────────────────────────────────────
