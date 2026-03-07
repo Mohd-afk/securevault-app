@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, LogOut, FileText } from 'lucide-react';
-import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, type AppSettings, type ItemType } from '../store';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, LogOut, FileText, AtSign, Loader2, Check, X, Pencil } from 'lucide-react';
+import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, type AppSettings, type ItemType, verifyMasterPassword } from '../store';
 import { signOut } from '../auth';
+import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
 import { toast } from 'sonner';
 import type { User } from 'firebase/auth';
 
@@ -47,6 +48,77 @@ export function Settings() {
         items: Array<{ title: string; username: string; password: string; url: string }>;
     } | null>(null);
 
+    // Username state
+    const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+    const [editingUsername, setEditingUsername] = useState(false);
+    const [newUsername, setNewUsername] = useState('');
+    const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+    const usernameCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [savingUsername, setSavingUsername] = useState(false);
+
+    const VALID_USERNAME = /^[a-z0-9_]{3,20}$/;
+
+    // Load username on mount
+    useEffect(() => {
+        if (user?.uid) {
+            getUsernameForUid(user.uid).then(u => setCurrentUsername(u)).catch(() => { });
+        }
+    }, [user?.uid]);
+
+    const handleNewUsernameChange = (value: string) => {
+        const cleaned = value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+        setNewUsername(cleaned);
+
+        if (usernameCheckTimer.current) clearTimeout(usernameCheckTimer.current);
+
+        if (!cleaned || cleaned.length < 3) {
+            setUsernameStatus(cleaned.length > 0 ? 'invalid' : 'idle');
+            return;
+        }
+
+        if (!VALID_USERNAME.test(cleaned)) {
+            setUsernameStatus('invalid');
+            return;
+        }
+
+        if (cleaned === currentUsername) {
+            setUsernameStatus('idle');
+            return;
+        }
+
+        setUsernameStatus('checking');
+        usernameCheckTimer.current = setTimeout(async () => {
+            try {
+                const available = await checkUsernameAvailable(cleaned);
+                setUsernameStatus(available ? 'available' : 'taken');
+            } catch {
+                setUsernameStatus('idle');
+            }
+        }, 400);
+    };
+
+    const handleSaveUsername = async () => {
+        if (!user?.uid || !newUsername || usernameStatus !== 'available') return;
+        setSavingUsername(true);
+        try {
+            if (currentUsername) {
+                await changeUsername(user.uid, currentUsername, newUsername);
+            } else {
+                // User didn't have a username before (legacy user)
+                const { claimUsername } = await import('../firestore');
+                await claimUsername(user.uid, newUsername);
+            }
+            setCurrentUsername(newUsername);
+            setEditingUsername(false);
+            setNewUsername('');
+            setUsernameStatus('idle');
+            toast.success('Username updated!');
+        } catch {
+            toast.error('Failed to update username. It may have just been taken.');
+        }
+        setSavingUsername(false);
+    };
+
     const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
         const updated = { ...settings, [key]: value };
         setSettings(updated);
@@ -72,7 +144,14 @@ export function Settings() {
 
         setChangingPassword(true);
         try {
-            const success = await changeMasterPassword(currentPassword, newPassword);
+            // Verify the current password first
+            const verified = await verifyMasterPassword(currentPassword);
+            if (!verified) {
+                setChangeError('Current password is incorrect');
+                setChangingPassword(false);
+                return;
+            }
+            const success = await changeMasterPassword(newPassword);
             if (success) {
                 setChangeSuccess(true);
                 setCurrentPassword('');
@@ -268,6 +347,83 @@ export function Settings() {
                             <LogOut className="w-4 h-4" />
                             Sign Out
                         </button>
+
+                        {/* Username Section */}
+                        <div className="pt-3 border-t border-white/5">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                        <AtSign className="w-4 h-4 text-purple-400" />
+                                    </div>
+                                    <div>
+                                        <span className="text-white text-sm block">Username</span>
+                                        {currentUsername ? (
+                                            <span className="text-gray-400 text-xs">@{currentUsername}</span>
+                                        ) : (
+                                            <span className="text-gray-500 text-xs italic">Not set</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setEditingUsername(!editingUsername);
+                                        setNewUsername(currentUsername || '');
+                                        setUsernameStatus('idle');
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-gray-200 transition-colors"
+                                >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+
+                            {editingUsername && (
+                                <div className="mt-3 space-y-2">
+                                    <div className="relative">
+                                        <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                                        <input
+                                            type="text"
+                                            value={newUsername}
+                                            onChange={(e) => handleNewUsernameChange(e.target.value)}
+                                            placeholder="new_username"
+                                            className={`w-full bg-[#1a1a2e] border rounded-xl py-2.5 pl-9 pr-10 text-white text-sm placeholder-gray-500 focus:outline-none transition-colors ${usernameStatus === 'available' ? 'border-emerald-500'
+                                                : usernameStatus === 'taken' || usernameStatus === 'invalid' ? 'border-red-500'
+                                                    : 'border-gray-700 focus:border-cyan-500'
+                                                }`}
+                                            maxLength={20}
+                                            autoComplete="off"
+                                        />
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                            {usernameStatus === 'checking' && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
+                                            {usernameStatus === 'available' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                                            {(usernameStatus === 'taken' || usernameStatus === 'invalid') && <X className="w-3.5 h-3.5 text-red-400" />}
+                                        </div>
+                                    </div>
+
+                                    <div className="text-[11px]">
+                                        {usernameStatus === 'available' && <p className="text-emerald-400">✓ Available</p>}
+                                        {usernameStatus === 'taken' && <p className="text-red-400">✗ Already taken</p>}
+                                        {usernameStatus === 'invalid' && <p className="text-red-400">3-20 chars, lowercase, numbers, underscores only</p>}
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => { setEditingUsername(false); setNewUsername(''); setUsernameStatus('idle'); }}
+                                            className="flex-1 py-2 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors text-xs"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleSaveUsername}
+                                            disabled={savingUsername || usernameStatus !== 'available'}
+                                            className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 rounded-xl disabled:opacity-50 transition-all text-xs flex items-center justify-center gap-1"
+                                        >
+                                            {savingUsername ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                                            {savingUsername ? 'Saving...' : 'Save'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 

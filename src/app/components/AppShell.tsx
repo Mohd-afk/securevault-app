@@ -127,7 +127,6 @@ export function AppShell() {
     return <AuthScreen onAuthenticated={() => {
       // Completed full login or magic link setup
       setMagicLinkActive(false);
-      clearLocalVaultData();
       setUser(auth.currentUser);
       setUnlocked(true); // Don't require double-prompting the password
     }} />;

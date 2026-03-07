@@ -1,8 +1,3 @@
-// ─── SecureVault Firestore Sync Module ───────────────────────────────
-// Handles reading/writing encrypted vault data and settings to Firestore.
-// All vault data is encrypted client-side before storage.
-// ─────────────────────────────────────────────────────────────────────
-
 import {
     doc,
     setDoc,
@@ -10,6 +5,7 @@ import {
     onSnapshot,
     serverTimestamp,
     deleteDoc,
+    writeBatch,
     type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -24,6 +20,14 @@ function vaultDocRef(uid: string) {
 
 function settingsDocRef(uid: string) {
     return doc(db, 'users', uid, 'data', 'settings');
+}
+
+function profileDocRef(uid: string) {
+    return doc(db, 'users', uid, 'data', 'profile');
+}
+
+function usernameDocRef(username: string) {
+    return doc(db, 'usernames', username);
 }
 
 // ── Vault operations ─────────────────────────────────────────────────
@@ -118,6 +122,50 @@ export async function loadSettingsFromCloud(
  * Used for "Reset Vault" functionality.
  */
 export async function deleteCloudVault(uid: string): Promise<void> {
-    const vaultRef = doc(db, 'users', uid);
-    await deleteDoc(vaultRef);
+    // Delete vault and settings subdocuments (NOT the parent user doc)
+    const batch = writeBatch(db);
+    batch.delete(vaultDocRef(uid));
+    batch.delete(settingsDocRef(uid));
+    await batch.commit();
 }
+
+// ── Username operations ──────────────────────────────────────────────
+
+/**
+ * Check if a username is available.
+ */
+export async function checkUsernameAvailable(username: string): Promise<boolean> {
+    const snap = await getDoc(usernameDocRef(username));
+    return !snap.exists();
+}
+
+/**
+ * Claim a username for a user. Writes to both `usernames/{username}` and `users/{uid}/data/profile`.
+ */
+export async function claimUsername(uid: string, username: string): Promise<void> {
+    const batch = writeBatch(db);
+    batch.set(usernameDocRef(username), { uid, createdAt: serverTimestamp() });
+    batch.set(profileDocRef(uid), { username, updatedAt: serverTimestamp() });
+    await batch.commit();
+}
+
+/**
+ * Get the username for a user by UID.
+ */
+export async function getUsernameForUid(uid: string): Promise<string | null> {
+    const snap = await getDoc(profileDocRef(uid));
+    if (!snap.exists()) return null;
+    return snap.data().username ?? null;
+}
+
+/**
+ * Change a user's username. Deletes old entry, creates new one atomically.
+ */
+export async function changeUsername(uid: string, oldUsername: string, newUsername: string): Promise<void> {
+    const batch = writeBatch(db);
+    batch.delete(usernameDocRef(oldUsername));
+    batch.set(usernameDocRef(newUsername), { uid, createdAt: serverTimestamp() });
+    batch.set(profileDocRef(uid), { username: newUsername, updatedAt: serverTimestamp() });
+    await batch.commit();
+}
+

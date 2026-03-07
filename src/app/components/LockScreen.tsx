@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Eye, EyeOff, KeyRound, LogOut, RefreshCcw } from 'lucide-react';
+import { Shield, Eye, EyeOff, KeyRound, LogOut } from 'lucide-react';
 import {
   hasConfiguredVault,
   setupInitialVault,
@@ -7,7 +7,6 @@ import {
   unlockVault,
   setSessionPassword,
   migrateLocalToCloud,
-  resetVault,
 } from '../store';
 import { useEffect } from 'react';
 
@@ -175,26 +174,6 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
             </button>
           )}
 
-          {!isSetup && (
-            <button
-              onClick={async () => {
-                if (window.confirm('Are you sure? This will PERMANENTLY delete all your cloud and local vault data. There is no way to recover it.')) {
-                  setLoading(true);
-                  try {
-                    await resetVault();
-                    window.location.reload();
-                  } catch (e) {
-                    setError('Failed to reset vault. Please check your connection.');
-                  }
-                  setLoading(false);
-                }
-              }}
-              className="flex items-center gap-2 text-red-500/60 text-[10px] uppercase tracking-wider hover:text-red-400 transition-colors"
-            >
-              <RefreshCcw className="w-3 h-3" />
-              Reset Vault (Data Loss!)
-            </button>
-          )}
         </div>
       </div>
     </div>
