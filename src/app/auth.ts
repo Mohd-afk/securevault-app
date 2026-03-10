@@ -13,6 +13,7 @@ import {
     signInWithEmailLink,
     updatePassword,
     sendPasswordResetEmail,
+    fetchSignInMethodsForEmail,
     type User,
 } from 'firebase/auth';
 import { auth } from './firebase';
@@ -20,6 +21,14 @@ import { auth } from './firebase';
 // ── Email Links (Flow 1 & 3) ─────────────────────────────────────────
 
 export async function sendPasswordlessVerificationLink(email: string): Promise<void> {
+    if (!email) throw new Error("Email is required");
+
+    // Check if the user already exists before sending a signup link
+    const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+    if (signInMethods.length > 0) {
+        throw new Error('auth/email-already-in-use');
+    }
+
     const actionCodeSettings = {
         // Automatically redirects back to app, needs to match Firebase console config
         url: window.location.origin,

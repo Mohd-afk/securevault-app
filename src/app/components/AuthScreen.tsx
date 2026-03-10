@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import jsPDF from 'jspdf';
 import {
     Shield,
     Mail,
@@ -249,6 +250,48 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         setGoogleLoading(false);
     };
 
+    // ── Generate Dynamic PDF ─────────────────────────────────────────
+    const handleDownloadPDF = () => {
+        if (!password) return;
+
+        const doc = new jsPDF();
+
+        // Add styling and text to the PDF
+        doc.setFillColor(26, 26, 46); // Dark blue background color (#1a1a2e)
+        doc.rect(0, 0, 210, 297, 'F'); // Fill the entire A4 page
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(24);
+        doc.text("SecureVault Emergency Kit", 20, 30);
+
+        doc.setFontSize(12);
+        doc.setTextColor(156, 163, 175); // gray-400
+        doc.text("Keep this document in a safe, physically secure location.", 20, 45);
+        doc.text("If you lose your Master Password, your vault cannot be recovered.", 20, 52);
+
+        doc.setDrawColor(55, 65, 81); // gray-700
+        doc.line(20, 60, 190, 60);
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+
+        doc.text("Account Details:", 20, 80);
+
+        doc.setFontSize(12);
+        doc.setTextColor(6, 182, 212); // cyan-500
+        doc.text(`Email: ${email}`, 20, 95);
+
+        doc.setTextColor(255, 255, 255);
+        doc.text(`Master Password: ${password}`, 20, 110);
+
+        doc.setTextColor(156, 163, 175); // gray-400
+        doc.setFontSize(10);
+        const date = new Date().toLocaleString();
+        doc.text(`Generated on: ${date}`, 20, 130);
+
+        doc.save("SecureVault_Emergency_Kit.pdf");
+    };
+
     // ── Master Password Setup (Flow 1 & 3) ────────────────────────
     const handleSetupMaster = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -403,15 +446,6 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                                         <li>Store it in a physically secure location.</li>
                                     </ol>
                                 </div>
-
-                                <a
-                                    href="/SecureVault_Emergency_Kit.pdf"
-                                    download="SecureVault_Emergency_Kit.pdf"
-                                    className="flex items-center justify-center gap-2 w-full bg-[#1a1a2e] hover:bg-[#1f2937] border border-gray-700 text-white py-2.5 rounded-lg transition-colors text-sm group"
-                                >
-                                    <Download className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
-                                    Download Emergency Kit
-                                </a>
                             </div>
                         </div>
                     )}
@@ -520,6 +554,18 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                                     I understand that my Master Password cannot be recovered, and I have saved it in a secure location.
                                 </span>
                             </label>
+                        )}
+
+                        {!isResetFlow && (
+                            <button
+                                type="button"
+                                onClick={handleDownloadPDF}
+                                disabled={!hasAcknowledged || !isPasswordStrong(password)}
+                                className="w-full flex items-center justify-center gap-2 bg-[#16213e] hover:bg-[#1f2937] border border-gray-700 disabled:opacity-50 text-white py-3 rounded-xl transition-colors mt-4 text-sm"
+                            >
+                                <Download className="w-4 h-4 text-gray-400" />
+                                Download PDF Emergency Kit
+                            </button>
                         )}
 
                         <button
