@@ -3,10 +3,8 @@ import { Shield, Eye, EyeOff, KeyRound, LogOut } from 'lucide-react';
 import {
   hasConfiguredVault,
   setupInitialVault,
-  verifyMasterPassword,
   unlockVault,
   setSessionPassword,
-  migrateLocalToCloud,
 } from '../store';
 import { useEffect } from 'react';
 
@@ -65,13 +63,14 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
         onUnlock();
       } else {
         // ── Returning user unlock ─────────────────────────────
-        const valid = await verifyMasterPassword(password);
-        if (valid) {
+        // Go straight to unlockVault — it loads from cloud, derives the key,
+        // and decrypts in a single pass. If the password is wrong, decryption
+        // throws and we land in the catch block. This avoids running PBKDF2
+        // multiple times (verify → unlock → migrate was 3x before).
+        try {
           await unlockVault(password);
-          // Migrate any local-only data to cloud
-          await migrateLocalToCloud();
           onUnlock();
-        } else {
+        } catch {
           setError('Incorrect master password');
         }
       }

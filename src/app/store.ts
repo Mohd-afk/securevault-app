@@ -1,10 +1,11 @@
 import {
   deriveEncryptionKey,
+  deriveAuthKey,
   encryptWithKey,
   decryptWithKey,
   type EncryptedPayload,
 } from './crypto';
-import { getCurrentUser } from './auth';
+import { getCurrentUser, finalizeMasterPasswordSetup } from './auth';
 import {
   saveVaultToCloud,
   loadVaultFromCloud,
@@ -396,32 +397,6 @@ export async function bulkAddVaultItems(
   return created.length;
 }
 
-// ── Sample data ──────────────────────────────────────────────────────
-
-export async function seedSampleData(password: string): Promise<void> {
-  const samples: Omit<VaultItem, 'id' | 'createdAt' | 'updatedAt'>[] = [
-    { title: 'Google', username: 'john.doe@gmail.com', password: 'Str0ng!Pass#2024', type: 'Website', url: 'https://accounts.google.com', note: 'Personal Google account' },
-    { title: 'GitHub', username: 'johndoe', password: 'gh_s3cur3_t0k3n!', type: 'Website', url: 'https://github.com', note: 'Developer account' },
-    { title: 'Netflix', username: 'john.doe@gmail.com', password: 'N3tfl1x_F@m1ly', type: 'App', url: 'https://netflix.com', note: 'Family plan' },
-    { title: 'Home WiFi', username: 'admin', password: 'WiFi_R0ut3r_2024!', type: 'Other', url: 'http://192.168.0.1', note: 'Router admin panel - TP-Link Archer' },
-    { title: 'Front Door Lock', username: '', password: '4829', type: 'Door Lock', url: '', note: 'Main entrance keypad code' },
-    { title: 'Phone PIN', username: '', password: '847291', type: 'Phone', url: '', note: 'Samsung Galaxy S24 lock screen' },
-    { title: 'Bank Card', username: '', password: '7734', type: 'Card', url: '', note: 'Visa debit card ending 4521' },
-    { title: 'Amazon', username: 'john.doe@gmail.com', password: 'Amz_Sh0pp1ng!99', type: 'Website', url: 'https://amazon.com', note: 'Prime membership active' },
-  ];
-
-  const now = new Date().toISOString();
-  const items: VaultItem[] = samples.map((s) => ({
-    ...s,
-    id: generateId(),
-    createdAt: now,
-    updatedAt: now,
-  }));
-
-  _sessionPassword = password;
-  _cachedItems = items;
-  await saveVaultEverywhere(items, password);
-}
 
 // ── Settings ─────────────────────────────────────────────────────────
 
@@ -474,9 +449,15 @@ export function saveSettings(settings: AppSettings): void {
 export async function changeMasterPassword(
   newPassword: string,
 ): Promise<boolean> {
-  // Try to load items using currently cached ones. 
+  const email = getUserEmail();
+  if (!email) throw new Error("No user email available for key derivation");
+
+  // 1. Derive the new auth key and update Firebase Auth password
+  const newAuthKey = await deriveAuthKey(newPassword, email);
+  await finalizeMasterPasswordSetup(newAuthKey);
+
+  // 2. Re-encrypt vault data with the new encryption key
   const items = _cachedItems || [];
-  await setupInitialVault(newPassword);
   await saveVaultEverywhere(items, newPassword);
 
   _sessionPassword = newPassword;
