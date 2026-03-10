@@ -31,10 +31,10 @@ import {
     unlockVault,
     resetVault,
 } from '../store';
-import { checkUsernameAvailable, claimUsername } from '../firestore';
+import { checkUsernameAvailable, claimUsername, checkEmailRegistered, registerEmail } from '../firestore';
 import { getCurrentUser } from '../auth';
 
-type AuthMode = 'signin' | 'signup' | 'verify' | 'setup_master' | 'processing_link';
+type AuthMode = 'signin' | 'signup' | 'forgot' | 'verify' | 'setup_master' | 'processing_link';
 
 // ── Password strength validation ────────────────────────────────────
 
@@ -189,6 +189,15 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         setLoading(true);
 
         try {
+            if (mode === 'signup') {
+                const exists = await checkEmailRegistered(email);
+                if (exists) {
+                    setError('EMAIL_EXISTS');
+                    setLoading(false);
+                    return;
+                }
+            }
+
             await sendPasswordlessVerificationLink(email);
             setMode('verify');
         } catch (err: unknown) {
@@ -345,6 +354,9 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     await claimUsername(user.uid, username);
                 }
             }
+
+            // Register this email as 'used' via hashed Firestore document
+            await registerEmail(email);
 
             setSessionPassword(password);
             onAuthenticated();
@@ -624,7 +636,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                         <div>
                             <div className="flex justify-between items-center mb-1.5">
                                 <label className="text-gray-400 text-xs block">Master Password</label>
-                                <button type="button" onClick={() => { setMode('signup'); setError(''); setPassword(''); }} className="text-cyan-400 text-[10px] hover:underline">Forgot Master Password?</button>
+                                <button type="button" onClick={() => { setMode('forgot'); setError(''); setPassword(''); }} className="text-cyan-400 text-[10px] hover:underline">Forgot Master Password?</button>
                             </div>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />

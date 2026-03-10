@@ -30,6 +30,31 @@ function usernameDocRef(username: string) {
     return doc(db, 'usernames', username);
 }
 
+function registeredEmailDocRef(hash: string) {
+    return doc(db, 'registered_emails', hash);
+}
+
+// ── Email registration (Option 3 for Enumeration Protection) ────────
+
+export async function hashEmailForLookup(email: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(email.trim().toLowerCase());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function checkEmailRegistered(email: string): Promise<boolean> {
+    const hash = await hashEmailForLookup(email);
+    const snap = await getDoc(registeredEmailDocRef(hash));
+    return snap.exists();
+}
+
+export async function registerEmail(email: string): Promise<void> {
+    const hash = await hashEmailForLookup(email);
+    await setDoc(registeredEmailDocRef(hash), { registeredAt: serverTimestamp() });
+}
+
 // ── Vault operations ─────────────────────────────────────────────────
 
 export interface CloudVaultData {

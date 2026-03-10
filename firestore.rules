@@ -15,5 +15,12 @@ service cloud.firestore {
       allow delete: if request.auth != null
         && resource.data.uid == request.auth.uid;
     }
+
+    // Email enumeration protection (hashed emails)
+    // Anyone can verify if a specific hash exists (get), but no one can list them
+    match /registered_emails/{hash} {
+      allow get: if true;
+      allow create: if request.auth != null;
+    }
   }
 }
