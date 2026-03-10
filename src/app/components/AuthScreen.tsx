@@ -26,6 +26,7 @@ import {
     hasConfiguredVault,
     setupInitialVault,
     setSessionPassword,
+    unlockVault,
     resetVault,
 } from '../store';
 import { checkUsernameAvailable, claimUsername } from '../firestore';
@@ -168,9 +169,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             // They successfully authenticated. The session password state is updated
             // globally when `LockScreen` is bypassed or explicitly through `store.ts`.
-            // Here, unlocking the local vault is handled after login hook in App.tsx.
-            // But we must cache the password.
-            setSessionPassword(password);
+            // Load and decrypt vault data from cloud so it's ready immediately
+            await unlockVault(password);
             onAuthenticated();
         } catch (err: unknown) {
             // Generic message for security (don't reveal if user or pass is wrong)
