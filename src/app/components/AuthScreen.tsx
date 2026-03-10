@@ -12,6 +12,7 @@ import {
     AlertTriangle,
     AtSign,
     Loader2,
+    Download,
 } from 'lucide-react';
 import {
     sendPasswordlessVerificationLink,
@@ -93,6 +94,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [isResetFlow, setIsResetFlow] = useState(false);
+    const [hasAcknowledged, setHasAcknowledged] = useState(false);
 
     // ── Username state ─────────────────────────────────────────────────
     const [username, setUsername] = useState('');
@@ -272,6 +274,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 setError('Please choose an available username.');
                 return;
             }
+            if (!hasAcknowledged) {
+                setError('Please acknowledge the disclaimer before continuing.');
+                return;
+            }
         }
 
         setLoading(true);
@@ -378,6 +384,38 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                         </div>
                     )}
 
+                    {!isResetFlow && (
+                        <div className="mb-6 w-full bg-[#16213e] border border-red-500/30 rounded-xl overflow-hidden shadow-lg shadow-red-500/10">
+                            <div className="bg-red-500/10 px-4 py-3 border-b border-red-500/20 flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                                <h3 className="text-red-400 font-medium text-sm">Critical Security Notice</h3>
+                            </div>
+                            <div className="p-4 space-y-4">
+                                <p className="text-gray-300 text-sm leading-relaxed text-left">
+                                    SecureVault uses <strong>Zero-Knowledge Encryption</strong>. This means we do not store your Master Password and <strong>cannot reset it if you forget it.</strong>
+                                </p>
+
+                                <div className="bg-[#1a1a2e] p-3 rounded-lg border border-cyan-500/20">
+                                    <h4 className="text-cyan-400 text-xs font-semibold mb-2">Recommended Setup:</h4>
+                                    <ol className="text-gray-400 text-xs space-y-2 list-decimal list-inside text-left">
+                                        <li>Download your Emergency Kit PDF.</li>
+                                        <li>Write your new Master Password on it.</li>
+                                        <li>Store it in a physically secure location.</li>
+                                    </ol>
+                                </div>
+
+                                <a
+                                    href="/SecureVault_Emergency_Kit.pdf"
+                                    download="SecureVault_Emergency_Kit.pdf"
+                                    className="flex items-center justify-center gap-2 w-full bg-[#1a1a2e] hover:bg-[#1f2937] border border-gray-700 text-white py-2.5 rounded-lg transition-colors text-sm group"
+                                >
+                                    <Download className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
+                                    Download Emergency Kit
+                                </a>
+                            </div>
+                        </div>
+                    )}
+
                     <form onSubmit={handleSetupMaster} className="w-full space-y-4 pb-8">
                         <div>
                             <label className="text-gray-400 text-xs mb-1.5 block">Master Password</label>
@@ -467,9 +505,26 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                             <p className="text-red-400 text-sm text-center bg-red-500/10 border border-red-500/20 py-2 rounded-lg">{error}</p>
                         )}
 
+                        {!isResetFlow && (
+                            <label className="flex items-start gap-3 mt-4 mb-2 cursor-pointer group">
+                                <div className="relative flex items-center justify-center mt-0.5">
+                                    <input
+                                        type="checkbox"
+                                        checked={hasAcknowledged}
+                                        onChange={(e) => setHasAcknowledged(e.target.checked)}
+                                        className="peer appearance-none w-5 h-5 border-2 border-gray-600 rounded-md bg-[#16213e] checked:bg-cyan-500 checked:border-cyan-500 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                                    />
+                                    <Check className="absolute w-3.5 h-3.5 text-[#1a1a2e] opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
+                                </div>
+                                <span className="text-gray-400 text-xs leading-snug group-hover:text-gray-300 transition-colors text-left flex-1">
+                                    I understand that my Master Password cannot be recovered, and I have saved it in a secure location.
+                                </span>
+                            </label>
+                        )}
+
                         <button
                             type="submit"
-                            disabled={loading || !password || !confirmPassword || !isPasswordStrong(password) || (!isResetFlow && usernameStatus !== 'available')}
+                            disabled={loading || !password || !confirmPassword || !isPasswordStrong(password) || (!isResetFlow && (usernameStatus !== 'available' || !hasAcknowledged))}
                             className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] mt-4 shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2"
                         >
                             {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
