@@ -36,48 +36,7 @@ import { getCurrentUser } from '../auth';
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'verify' | 'setup_master' | 'processing_link';
 
-// ── Password strength validation ────────────────────────────────────
-
-interface PasswordCheck {
-    label: string;
-    passed: boolean;
-}
-
-function validatePassword(password: string): PasswordCheck[] {
-    return [
-        { label: 'At least 8 characters', passed: password.length >= 8 },
-        { label: 'One uppercase letter (A-Z)', passed: /[A-Z]/.test(password) },
-        { label: 'One lowercase letter (a-z)', passed: /[a-z]/.test(password) },
-        { label: 'One number (0-9)', passed: /[0-9]/.test(password) },
-        { label: 'One special character (!@#$...)', passed: /[!@#$%^&*()_+\-=\[\]{}|;':",./<>?\\`~]/.test(password) },
-    ];
-}
-
-function isPasswordStrong(password: string): boolean {
-    return validatePassword(password).every((c) => c.passed);
-}
-
-function PasswordStrengthIndicator({ password }: { password: string }) {
-    const checks = validatePassword(password);
-    if (!password) return null;
-
-    return (
-        <div className="space-y-1.5 pt-1 mb-3">
-            {checks.map((check) => (
-                <div key={check.label} className="flex items-center gap-2 text-xs">
-                    {check.passed ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    ) : (
-                        <X className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                    )}
-                    <span className={check.passed ? 'text-emerald-400' : 'text-red-400'}>
-                        {check.label}
-                    </span>
-                </div>
-            ))}
-        </div>
-    );
-}
+import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
 
 // ── Component ────────────────────────────────────────────────────────
 
@@ -636,11 +595,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     {/* Master Password - Only for Login */}
                     {isLogin && (
                         <div>
-                            <div className="flex justify-between items-center mb-1.5">
-                                <label className="text-gray-400 text-xs block">Master Password</label>
-                                <button type="button" onClick={() => { setMode('forgot'); setError(''); setPassword(''); }} className="text-cyan-400 text-[10px] hover:underline">Forgot Master Password?</button>
-                            </div>
-                            <div className="relative">
+                            <label className="text-gray-400 text-xs mb-1.5 block">Master Password</label>
+                            <div className="relative mb-2">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
                                 <input
                                     type={showPassword ? 'text' : 'password'}
@@ -657,6 +613,9 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                                 >
                                     {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
                                 </button>
+                            </div>
+                            <div className="flex justify-end">
+                                <button type="button" onClick={() => { setMode('forgot'); setError(''); setPassword(''); }} className="text-cyan-400 text-xs hover:underline pt-1">Forgot Master Password?</button>
                             </div>
                         </div>
                     )}

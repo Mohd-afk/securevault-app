@@ -1,25 +1,27 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Search, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Shield, Lock, X, Settings as SettingsIcon } from 'lucide-react';
+import { Plus, Search, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Shield, Lock, X, Settings as SettingsIcon, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { getVaultItems, addVaultChangeListener, type VaultItem, type ItemType } from '../store';
 import type { User } from 'firebase/auth';
 
-const typeIcons: Record<ItemType, React.ReactNode> = {
+const typeIcons: Record<string, React.ReactNode> = {
   Website: <Globe className="w-5 h-5 text-cyan-400" />,
   App: <Smartphone className="w-5 h-5 text-purple-400" />,
   Phone: <Phone className="w-5 h-5 text-green-400" />,
   'Door Lock': <DoorOpen className="w-5 h-5 text-amber-400" />,
   Card: <CreditCard className="w-5 h-5 text-pink-400" />,
   Other: <KeyRound className="w-5 h-5 text-gray-400" />,
+  Trash: <Trash2 className="w-5 h-5 text-red-400" />,
 };
 
-const typeColors: Record<ItemType, string> = {
+const typeColors: Record<string, string> = {
   Website: 'bg-cyan-500/10',
   App: 'bg-purple-500/10',
   Phone: 'bg-green-500/10',
   'Door Lock': 'bg-amber-500/10',
   Card: 'bg-pink-500/10',
   Other: 'bg-gray-500/10',
+  Trash: 'bg-red-500/10',
 };
 
 interface PasswordListProps {
@@ -33,6 +35,7 @@ export function PasswordList({ onLock, user }: PasswordListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [items, setItems] = useState<VaultItem[]>(getVaultItems());
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   // Listen for real-time vault changes (from Firestore sync)
   useEffect(() => {
@@ -58,15 +61,26 @@ export function PasswordList({ onLock, user }: PasswordListProps) {
     );
   }, [items, searchQuery]);
 
-  // Group by type
+  // Group by type (or Trash)
   const grouped = useMemo(() => {
-    const map = new Map<ItemType, VaultItem[]>();
+    const map = new Map<string, VaultItem[]>();
     filteredItems.forEach(item => {
-      const existing = map.get(item.type) || [];
+      const type = item.deletedAt ? 'Trash' : item.type;
+      const existing = map.get(type) || [];
       existing.push(item);
-      map.set(item.type, existing);
+      map.set(type, existing);
     });
-    return map;
+    // Sort so Trash is at the end
+    const sortedMap = new Map<string, VaultItem[]>();
+    Array.from(map.keys())
+      .sort((a, b) => {
+        if (a === 'Trash') return 1;
+        if (b === 'Trash') return -1;
+        return a.localeCompare(b);
+      })
+      .forEach(key => sortedMap.set(key, map.get(key)!));
+
+    return sortedMap;
   }, [filteredItems]);
 
   // User initial for avatar
@@ -160,36 +174,49 @@ export function PasswordList({ onLock, user }: PasswordListProps) {
           </div>
         ) : (
           <div className="px-4 space-y-5">
-            {Array.from(grouped.entries()).map(([type, typeItems]) => (
-              <div key={type}>
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <span className="text-gray-500 text-xs uppercase tracking-wider">{type}</span>
-                  <span className="text-gray-600 text-xs">({typeItems.length})</span>
+            {Array.from(grouped.entries()).map(([type, typeItems]) => {
+              const isExpanded = expandedCategories[type] !== false; // Default true
+              return (
+                <div key={type}>
+                  <button
+                    onClick={() => setExpandedCategories(prev => ({ ...prev, [type]: !isExpanded }))}
+                    className="w-full flex items-center justify-between mb-2 px-1 hover:bg-white/5 rounded-lg py-1 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500 text-xs uppercase tracking-wider">{type}</span>
+                      <span className="text-gray-600 text-xs">({typeItems.length})</span>
+                    </div>
+                    <div className="text-gray-500 group-hover:text-gray-300">
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="bg-[#16213e] rounded-xl overflow-hidden divide-y divide-white/5">
+                      {typeItems.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => navigate(`/item/${item.id}`)}
+                          className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 active:bg-white/10 transition-colors text-left"
+                        >
+                          <div className={`w-10 h-10 rounded-xl ${typeColors[item.deletedAt ? 'Trash' : item.type]} flex items-center justify-center shrink-0`}>
+                            {typeIcons[item.deletedAt ? 'Trash' : item.type]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm truncate">{item.title}</p>
+                            <p className="text-gray-500 text-xs truncate mt-0.5">
+                              {item.username || item.url || item.type}
+                            </p>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="bg-[#16213e] rounded-xl overflow-hidden divide-y divide-white/5">
-                  {typeItems.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => navigate(`/item/${item.id}`)}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 active:bg-white/10 transition-colors text-left"
-                    >
-                      <div className={`w-10 h-10 rounded-xl ${typeColors[item.type]} flex items-center justify-center shrink-0`}>
-                        {typeIcons[item.type]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm truncate">{item.title}</p>
-                        <p className="text-gray-500 text-xs truncate mt-0.5">
-                          {item.username || item.url || item.type}
-                        </p>
-                      </div>
-                      <svg className="w-4 h-4 text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

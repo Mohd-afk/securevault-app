@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, LogOut, FileText, AtSign, Loader2, Check, X, Pencil } from 'lucide-react';
-import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, type AppSettings, type ItemType, verifyMasterPassword } from '../store';
-import { signOut } from '../auth';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2 } from 'lucide-react';
+import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, type AppSettings, type ItemType, verifyMasterPassword, resetVault } from '../store';
+import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
+import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
 import { toast } from 'sonner';
 import type { User } from 'firebase/auth';
 
@@ -36,6 +37,13 @@ export function Settings() {
     const [changeError, setChangeError] = useState('');
     const [changeSuccess, setChangeSuccess] = useState(false);
     const [changingPassword, setChangingPassword] = useState(false);
+
+    // Delete data form
+    const [showDeleteData, setShowDeleteData] = useState(false);
+    const [deleteDataPassword, setDeleteDataPassword] = useState('');
+    const [showDeletePassword, setShowDeletePassword] = useState(false);
+    const [deleteDataError, setDeleteDataError] = useState('');
+    const [deletingData, setDeletingData] = useState(false);
 
     // Timeout dropdown
     const [showTimeoutDropdown, setShowTimeoutDropdown] = useState(false);
@@ -137,6 +145,10 @@ export function Settings() {
             setChangeError('New passwords do not match');
             return;
         }
+        if (!isPasswordStrong(newPassword)) {
+            setChangeError('New password does not meet complexity requirements');
+            return;
+        }
         if (currentPassword === newPassword) {
             setChangeError('New password must be different from current password');
             return;
@@ -153,19 +165,62 @@ export function Settings() {
             }
             const success = await changeMasterPassword(newPassword);
             if (success) {
-                setChangeSuccess(true);
-                setCurrentPassword('');
-                setNewPassword('');
-                setConfirmPassword('');
-                setShowPasswordForm(false);
-                setTimeout(() => setChangeSuccess(false), 3000);
+                toast.success('Master password changed. Please log in again.');
+                await handleSignOut();
             } else {
-                setChangeError('Current password is incorrect');
+                setChangeError('Failed to change password');
             }
         } catch {
             setChangeError('An error occurred. Please try again.');
         }
         setChangingPassword(false);
+    };
+
+    const handleForgotPassword = async () => {
+        if (!user?.email) return;
+        try {
+            await sendPasswordlessVerificationLink(user.email);
+            toast.success('Password reset link sent to your email.');
+            await handleSignOut();
+        } catch {
+            toast.error('Failed to send reset link.');
+        }
+    };
+
+    const handleDeleteData = async () => {
+        setDeleteDataError('');
+        if (!deleteDataPassword) {
+            setDeleteDataError('Please enter your master password');
+            return;
+        }
+        setDeletingData(true);
+        try {
+            const verified = await verifyMasterPassword(deleteDataPassword);
+            if (!verified) {
+                setDeleteDataError('Incorrect password');
+                setDeletingData(false);
+                return;
+            }
+            await resetVault();
+            toast.success('All data has been deleted');
+            await handleSignOut();
+        } catch {
+            setDeleteDataError('An error occurred while deleting data');
+            setDeletingData(false);
+        }
+    };
+
+    const handleShareApp = () => {
+        if (navigator.share) {
+            navigator.share({
+                title: 'SecureVault',
+                text: 'Check out SecureVault, a secure, zero-knowledge password manager!',
+                url: window.location.origin
+            }).catch(() => { });
+        } else {
+            navigator.clipboard.writeText(window.location.origin);
+            toast.success('App link copied to clipboard!');
+        }
     };
 
     // ── CSV Import ───────────────────────────────────────────────────
@@ -364,16 +419,18 @@ export function Settings() {
                                         )}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => {
-                                        setEditingUsername(!editingUsername);
-                                        setNewUsername(currentUsername || '');
-                                        setUsernameStatus('idle');
-                                    }}
-                                    className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-gray-200 transition-colors"
-                                >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                </button>
+                                {(!currentUsername) && (
+                                    <button
+                                        onClick={() => {
+                                            setEditingUsername(!editingUsername);
+                                            setNewUsername(currentUsername || '');
+                                            setUsernameStatus('idle');
+                                        }}
+                                        className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-gray-200 transition-colors"
+                                    >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
                             </div>
 
                             {editingUsername && (
@@ -515,6 +572,17 @@ export function Settings() {
                                     >
                                         {changingPassword ? 'Changing...' : 'Change Password'}
                                     </button>
+
+                                    {/* Password Complexity Indicator can also be shown if needed, but not required now */}
+                                    <div className="pt-4 mt-2 border-t border-white/5 text-center">
+                                        <p className="text-gray-400 text-xs mb-2">Forgot your current password?</p>
+                                        <button
+                                            onClick={handleForgotPassword}
+                                            className="text-cyan-400 text-xs hover:text-cyan-300 transition-colors"
+                                        >
+                                            Send Password Reset Link
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -567,6 +635,27 @@ export function Settings() {
                             >
                                 <span
                                     className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${settings.lockOnHide ? 'translate-x-5' : 'translate-x-0'}`}
+                                />
+                            </button>
+                        </div>
+
+                        {/* Block Screenshots toggle */}
+                        <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                            <div>
+                                <p className="text-white text-sm">Block screenshots</p>
+                                <p className="text-gray-500 text-xs mt-0.5">Prevent screenshots & screen recording</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    updateSetting('allowScreenshots', !settings.allowScreenshots);
+                                    if (settings.allowScreenshots) {
+                                        toast.info('Screenshot blocking requires the Android wrapper to be installed.');
+                                    }
+                                }}
+                                className={`relative w-11 h-6 rounded-full transition-colors ${!settings.allowScreenshots ? 'bg-cyan-500' : 'bg-gray-600'}`}
+                            >
+                                <span
+                                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${!settings.allowScreenshots ? 'translate-x-5' : 'translate-x-0'}`}
                                 />
                             </button>
                         </div>
@@ -639,6 +728,88 @@ export function Settings() {
                                 </div>
                             </div>
                         )}
+
+                        {/* Delete All Data */}
+                        <div className="pt-4 border-t border-white/5 border-red-500/20">
+                            <button
+                                onClick={() => setShowDeleteData(!showDeleteData)}
+                                className="w-full flex items-center justify-between"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+                                        <Trash2 className="w-4 h-4 text-red-400" />
+                                    </div>
+                                    <div className="text-left">
+                                        <span className="text-white text-sm block">Delete Account & Data</span>
+                                        <span className="text-red-400/80 text-xs">Permanently remove Everything</span>
+                                    </div>
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showDeleteData ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {showDeleteData && (
+                                <div className="mt-4 space-y-4 pt-4 border-t border-white/5">
+                                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                                        <p className="text-red-400 text-sm font-medium mb-1">Warning: Destructive Action</p>
+                                        <p className="text-gray-400 text-xs">This will permanently delete your account, settings, and all vault data. This cannot be undone.</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-gray-400 text-xs mb-1.5 block">Confirm Master Password</label>
+                                        <div className="relative">
+                                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
+                                            <input
+                                                type={showDeletePassword ? 'text' : 'password'}
+                                                value={deleteDataPassword}
+                                                onChange={(e) => setDeleteDataPassword(e.target.value)}
+                                                placeholder="Enter master password to confirm"
+                                                className="w-full bg-[#1a1a2e] border border-gray-700/50 rounded-xl py-3 pl-10 pr-11 text-white placeholder-gray-500 focus:outline-none focus:border-red-500/50 transition-colors"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowDeletePassword(!showDeletePassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                                            >
+                                                {showDeletePassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {deleteDataError && (
+                                        <p className="text-red-400 text-sm">{deleteDataError}</p>
+                                    )}
+
+                                    <button
+                                        onClick={handleDeleteData}
+                                        disabled={deletingData || !deleteDataPassword}
+                                        className="w-full bg-red-500 text-white py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg shadow-red-500/20 hover:bg-red-600"
+                                    >
+                                        {deletingData ? 'Deleting...' : 'Delete Everything'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Referrals Section */}
+                <div>
+                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Spread the Word</span>
+                    <div className="bg-[#16213e] rounded-xl p-4">
+                        <button
+                            onClick={handleShareApp}
+                            className="w-full flex items-center justify-between group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                    <Share2 className="w-5 h-5 text-cyan-400" />
+                                </div>
+                                <div className="text-left">
+                                    <span className="text-white text-sm block font-medium group-hover:text-cyan-400 transition-colors">Share SecureVault</span>
+                                    <span className="text-gray-400 text-xs">Invite your friends</span>
+                                </div>
+                            </div>
+                        </button>
                     </div>
                 </div>
 

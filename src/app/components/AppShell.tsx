@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet } from 'react-router';
 import { LockScreen } from './LockScreen';
 import { AuthScreen } from './AuthScreen';
-import { getSettings, clearSession, clearLocalVaultData } from '../store';
+import { getSettings, clearSession, clearLocalVaultData, getVaultItems, permanentlyDeleteVaultItem } from '../store';
 import { onAuthChange, signOut, isVerificationLink } from '../auth';
 import { auth } from '../firebase';
 import type { User } from 'firebase/auth';
@@ -59,6 +59,23 @@ export function AppShell() {
       // Ignore sign-out errors
     }
   }, []);
+
+  // ── Auto-delete expired trash items ────────────────────────────────
+  useEffect(() => {
+    if (!unlocked) return;
+    const items = getVaultItems();
+    const now = new Date().getTime();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+
+    items.forEach(item => {
+      if (item.deletedAt) {
+        const deletedTime = new Date(item.deletedAt).getTime();
+        if (now - deletedTime > thirtyDaysMs) {
+          permanentlyDeleteVaultItem(item.id).catch(console.error);
+        }
+      }
+    });
+  }, [unlocked]);
 
   // ── Auto-lock on inactivity ──────────────────────────────────────
   useEffect(() => {

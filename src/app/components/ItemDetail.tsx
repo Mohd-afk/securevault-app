@@ -77,10 +77,10 @@ export function ItemDetail() {
             <label className="text-gray-500 text-xs block mb-1">Username</label>
             {item.username ? (
               <div className="flex items-center justify-between">
-                <p className="text-white text-sm">{item.username}</p>
+                <p className="text-white text-sm break-all mr-2">{item.username}</p>
                 <button
                   onClick={() => copyToClipboard(item.username, 'username')}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400"
+                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 shrink-0"
                 >
                   {copied === 'username' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
                 </button>
@@ -94,10 +94,10 @@ export function ItemDetail() {
           <div>
             <label className="text-gray-500 text-xs block mb-1">Password</label>
             <div className="flex items-center justify-between bg-white/5 rounded-lg py-2 px-3">
-              <p className="text-white text-sm font-mono tracking-wider">
+              <p className="text-white text-sm font-mono tracking-wider break-all mr-2">
                 {showPassword ? item.password : maskedPassword}
               </p>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => setShowPassword(!showPassword)}
                   className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400"
@@ -122,10 +122,10 @@ export function ItemDetail() {
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-cyan-400 text-sm flex items-center gap-1.5 hover:underline"
+                className="text-cyan-400 text-sm flex items-start gap-1.5 hover:underline break-all"
               >
-                {item.url}
-                <ExternalLink className="w-3.5 h-3.5" />
+                <span className="flex-1">{item.url}</span>
+                <ExternalLink className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               </a>
             </div>
           )}
@@ -158,7 +158,7 @@ export function ItemDetail() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => navigate(`/edit/${item.id}`)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 transition-colors"
@@ -173,16 +173,28 @@ export function ItemDetail() {
             <Trash2 className="w-4 h-4" />
             Delete
           </button>
-          <div className="flex-1" />
+          <div className="flex-1 min-w-[20px]" />
           <button
-            onClick={() => {
+            onClick={async () => {
               const text = `${item.title}\nUsername: ${item.username || 'N/A'}\nPassword: ${item.password}${item.url ? `\nURL: ${item.url}` : ''}`;
-              copyToClipboard(text, 'share');
+              if (navigator.share) {
+                try {
+                  await navigator.share({
+                    title: item.title,
+                    text: text,
+                  });
+                } catch (error) {
+                  // Fallback to copy if share fails or is cancelled
+                  copyToClipboard(text, 'share');
+                }
+              } else {
+                copyToClipboard(text, 'share');
+              }
             }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors"
           >
-            <Share2 className="w-4 h-4" />
-            Share
+            {copied === 'share' ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
+            {copied === 'share' ? 'Copied' : 'Share'}
           </button>
         </div>
       </div>

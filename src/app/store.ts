@@ -29,11 +29,13 @@ export interface VaultItem {
   note: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
 }
 
 export interface AppSettings {
-  autoLockTimeout: number; // minutes (0 = never)
-  lockOnHide: boolean;     // lock when tab is hidden
+  autoLockTimeout: number; // minutes, 0 means never
+  lockOnHide: boolean; // lock when app goes to background
+  allowScreenshots: boolean; // allow screenshots (native wrapper required for enforcement)
 }
 
 // ── Storage keys ─────────────────────────────────────────────────────
@@ -369,8 +371,40 @@ export async function updateVaultItem(
 export async function deleteVaultItem(id: string): Promise<void> {
   if (!_sessionPassword) throw new Error('Vault is locked');
 
+  const items = getVaultItems();
+  const index = items.findIndex((i) => i.id === id);
+  if (index === -1) return;
+
+  items[index] = {
+    ...items[index],
+    deletedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  _cachedItems = [...items];
+  await saveVaultEverywhere(items, _sessionPassword);
+}
+
+export async function permanentlyDeleteVaultItem(id: string): Promise<void> {
+  if (!_sessionPassword) throw new Error('Vault is locked');
+
   const items = getVaultItems().filter((i) => i.id !== id);
   _cachedItems = items;
+  await saveVaultEverywhere(items, _sessionPassword);
+}
+
+export async function restoreVaultItem(id: string): Promise<void> {
+  if (!_sessionPassword) throw new Error('Vault is locked');
+
+  const items = getVaultItems();
+  const index = items.findIndex((i) => i.id === id);
+  if (index === -1) return;
+
+  items[index] = {
+    ...items[index],
+    deletedAt: undefined,
+    updatedAt: new Date().toISOString(),
+  };
+  _cachedItems = [...items];
   await saveVaultEverywhere(items, _sessionPassword);
 }
 
@@ -400,18 +434,19 @@ export async function bulkAddVaultItems(
 
 // ── Settings ─────────────────────────────────────────────────────────
 
-const DEFAULT_SETTINGS: AppSettings = {
+const defaultSettings: AppSettings = {
   autoLockTimeout: 5,
   lockOnHide: true,
+  allowScreenshots: true,
 };
 
 export function getSettings(): AppSettings {
   const raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) return { ...DEFAULT_SETTINGS };
+  if (!raw) return { ...defaultSettings };
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    return { ...defaultSettings, ...JSON.parse(raw) };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...defaultSettings };
   }
 }
 
@@ -422,7 +457,7 @@ export async function loadSettingsWithCloud(): Promise<AppSettings> {
       const cloudSettings = await loadSettingsFromCloud(uid);
       if (cloudSettings) {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(cloudSettings));
-        return { ...DEFAULT_SETTINGS, ...cloudSettings };
+        return { ...defaultSettings, ...cloudSettings };
       }
     } catch {
       // Fall through to local
