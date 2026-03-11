@@ -201,7 +201,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             await sendPasswordlessVerificationLink(email);
             setMode('verify');
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : '';
+            const message = err instanceof Error ? err.message : String(err);
             if (message.includes('auth/email-already-in-use')) {
                 setError('EMAIL_EXISTS');
             } else if (message.includes('auth/invalid-email')) {
@@ -209,7 +209,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             } else if (message.includes('auth/unauthorized-domain')) {
                 setError('This domain is not authorized. Please contact the admin.');
             } else {
-                setError('Failed to send verification link. Please check your connection and try again.');
+                setError('Failed: ' + message);
             }
         }
         setLoading(false);
