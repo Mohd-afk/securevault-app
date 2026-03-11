@@ -208,8 +208,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 setError('Please enter a valid email address.');
             } else if (message.includes('auth/unauthorized-domain')) {
                 setError('This domain is not authorized. Please contact the admin.');
+            } else if (message.includes('auth/quota-exceeded')) {
+                setError('Firebase daily email quota exceeded. Please try again tomorrow or use Google Sign-In.');
             } else {
-                setError('Failed: ' + message);
+                setError('Failed to send verification link. ' + message);
             }
         }
         setLoading(false);
