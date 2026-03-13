@@ -139,6 +139,7 @@ export async function loadSettingsFromCloud(
     return {
         autoLockTimeout: data.autoLockTimeout ?? 5,
         lockOnHide: data.lockOnHide ?? true,
+        allowScreenshots: data.allowScreenshots ?? true,
     };
 }
 

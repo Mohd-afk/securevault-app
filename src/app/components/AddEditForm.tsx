@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Eye, EyeOff, ChevronDown } from 'lucide-react';
 import { addVaultItem, getVaultItem, updateVaultItem, type ItemType } from '../store';
+import { toast } from 'sonner';
 
 const itemTypes: ItemType[] = ['Website', 'App', 'Phone', 'Door Lock', 'Card', 'Other'];
 
 export function AddEditForm() {
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
@@ -39,6 +41,7 @@ export function AddEditForm() {
   const handleSave = async () => {
     if (!canSave || saving) return;
     setSaving(true);
+    setSaveError('');
     try {
       if (isEdit && id) {
         await updateVaultItem(id, { title: title.trim(), username: username.trim(), password, type, url: url.trim(), note: note.trim() });
@@ -47,7 +50,10 @@ export function AddEditForm() {
         const newItem = await addVaultItem({ title: title.trim(), username: username.trim(), password, type, url: url.trim(), note: note.trim() });
         navigate(`/item/${newItem.id}`, { replace: true });
       }
-    } catch {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save. Please try again.';
+      setSaveError(message);
+      toast.error(message);
       setSaving(false);
     }
   };
@@ -171,6 +177,13 @@ export function AddEditForm() {
           />
         </div>
       </div>
+
+      {/* Error display */}
+      {saveError && (
+        <div className="px-4">
+          <p className="text-red-400 text-sm text-center bg-red-500/10 border border-red-500/20 py-2 rounded-lg">{saveError}</p>
+        </div>
+      )}
 
       {/* Footer Buttons */}
       <div className="sticky bottom-0 bg-[#1a1a2e]/95 backdrop-blur-sm border-t border-white/5 px-4 py-4 flex gap-3 justify-end">

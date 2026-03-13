@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2 } from 'lucide-react';
-import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, type AppSettings, type ItemType, verifyMasterPassword, resetVault } from '../store';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2 } from 'lucide-react';
+import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
 import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
@@ -544,6 +544,7 @@ export function Settings() {
                                                 className="w-full bg-[#1a1a2e] border border-gray-700/50 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
                                             />
                                         </div>
+                                        {newPassword && <PasswordStrengthIndicator password={newPassword} />}
                                     </div>
 
                                     {/* Confirm New Password */}
@@ -687,6 +688,37 @@ export function Settings() {
                                 onChange={handleFileSelect}
                                 className="hidden"
                             />
+                        </div>
+
+                        {/* Export Passwords */}
+                        <div className="pt-3 border-t border-white/5">
+                            <button
+                                onClick={() => {
+                                    const csv = exportVaultItemsAsCsv();
+                                    if (!csv || csv.split('\n').length <= 1) {
+                                        toast.error('No passwords to export');
+                                        return;
+                                    }
+                                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `securevault-export-${new Date().toISOString().slice(0, 10)}.csv`;
+                                    a.click();
+                                    URL.revokeObjectURL(url);
+                                    toast.success('Passwords exported as CSV');
+                                    toast.warning('This file contains unencrypted passwords. Delete it after use!', { duration: 8000 });
+                                }}
+                                className="w-full flex items-center gap-3"
+                            >
+                                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                                    <Download className="w-4 h-4 text-emerald-400" />
+                                </div>
+                                <div className="text-left">
+                                    <span className="text-white text-sm block">Export Passwords</span>
+                                    <span className="text-gray-500 text-xs">Download as CSV file</span>
+                                </div>
+                            </button>
                         </div>
 
                         {/* Import Preview */}

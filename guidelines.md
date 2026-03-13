@@ -11,7 +11,7 @@
 | **Minimalist trust** | A password manager must look calm, clean, and serious. No playful illustrations, no decorative gradients on backgrounds, no busy textures. |
 | **Depth through darkness** | The UI uses a layered dark-surface system. Deeper surfaces are darker; raised surfaces (cards, inputs) are slightly lighter. This creates perceived depth without shadows or borders. |
 | **Restrained colour** | Colour is used *only* for meaning: the brand accent (cyan-to-blue gradient) signals primary actions; category colours distinguish item types; red signals destruction. Everything else is greyscale. |
-| **Mobile-first, single-column** | The app is designed as a phone-width single-column layout (max-width `max-w-md`, centered with `mx-auto`). Every screen scrolls vertically. No horizontal scrolling, no side panels, no multi-column grids. |
+| **Mobile-first, Web-Sync** | The app is designed as a phone-width single-column layout (max-width `max-w-md`, centered with `mx-auto`). It is built as a Web App to ensure real-time syncing across all user devices (Mobile and Desktop). |
 | **Tactile feedback** | Interactive elements respond on press with `active:scale-[0.98]` or `active:scale-95`. Transitions use `transition-colors` or `transition-all` for smooth state changes. |
 
 ---

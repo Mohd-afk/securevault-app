@@ -3,10 +3,11 @@
 ## Working Name
 SecureVault (placeholder – final name can change)
 
-## Platforms and Scope (Initial Version)
-- Target platform: Android (mobile only).
-- Future platforms (not in first build): iOS, Web app.
-- Focus on **personal password and secret management**, not teams/enterprise.
+## Platforms and Scope
+- **Core Standard:** Mobile-First design philosophy.
+- **Platforms:** Web App (PWA) designed to run perfectly on Android, iOS, and Desktop.
+- **Syncing:** Real-time synchronization across multiple devices is a core pillar.
+- **Focus:** Secure, zero-knowledge personal secret management.
 
 ## High‑Level Concept
 A simple, modern, open‑source password manager that lets users store **all types of sensitive information** in one place:
@@ -137,11 +138,13 @@ The design goal is: **clean, minimalist, modern, trustworthy, and easy to use**.
 - `autoLockTimeout` (integer / duration).
 - (Future) sync configuration.
 
-## Future / Not for First Build
+## Core Rules & Product Pillars
 
-These features should be designed for but **don’t need to be implemented in v1**:
+### 1. Mobile-First, Everywhere Access
+The app is built as a **Mobile-First Web Application**. While it feels and behaves like a native mobile app, it is accessible via any web browser to ensure users can sync and access their vault across Android, iOS, and Desktop seamlessly.
 
-1. **Cloud sync / multi‑device access**
+### 2. Zero-Knowledge Sync
+Synchronization must never compromise security. Encryption happens strictly on the device. The "Syncing" feature only moves encrypted "gibberish" between devices; the server never sees the keys or the raw data.
    - Allow user to sync their encrypted vault so they can access it on Android, iOS, and Web.
    - Options include self‑hosted server or a simple managed backend.
 

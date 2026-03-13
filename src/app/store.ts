@@ -284,6 +284,13 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
   // Start real-time sync listener
   startRealtimeSync(uid, password);
 
+  // Auto-purge expired trash items (>30 days old)
+  purgeExpiredTrashItems().then((count) => {
+    if (count > 0) {
+      console.log(`Auto-purged ${count} expired trash item(s)`);
+    }
+  }).catch(() => { /* silently ignore purge errors */ });
+
   return items;
 }
 
@@ -429,6 +436,57 @@ export async function bulkAddVaultItems(
   _cachedItems = [...items];
   await saveVaultEverywhere(items, _sessionPassword);
   return created.length;
+}
+
+// ── Trash auto-purge ─────────────────────────────────────────────────
+
+/**
+ * Permanently removes items that have been in trash for more than 30 days.
+ * Should be called on vault unlock.
+ */
+export async function purgeExpiredTrashItems(): Promise<number> {
+  if (!_sessionPassword) return 0;
+
+  const items = getVaultItems();
+  const now = Date.now();
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+
+  const expired = items.filter(
+    (i) => i.deletedAt && now - new Date(i.deletedAt).getTime() > thirtyDays,
+  );
+
+  if (expired.length === 0) return 0;
+
+  const remaining = items.filter(
+    (i) => !i.deletedAt || now - new Date(i.deletedAt).getTime() <= thirtyDays,
+  );
+
+  _cachedItems = remaining;
+  await saveVaultEverywhere(remaining, _sessionPassword);
+  return expired.length;
+}
+
+// ── Export ────────────────────────────────────────────────────────────
+
+/**
+ * Returns a CSV string containing all active (non-deleted) vault items.
+ */
+export function exportVaultItemsAsCsv(): string {
+  const items = getVaultItems().filter((i) => !i.deletedAt);
+
+  const escape = (val: string) => {
+    if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+      return `"${val.replace(/"/g, '""')}"`;
+    }
+    return val;
+  };
+
+  const header = 'Title,Username,Password,URL,Type,Note';
+  const rows = items.map((i) =>
+    [i.title, i.username, i.password, i.url, i.type, i.note].map(escape).join(','),
+  );
+
+  return [header, ...rows].join('\n');
 }
 
 

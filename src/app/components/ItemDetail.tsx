@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check } from 'lucide-react';
-import { getVaultItem, deleteVaultItem, type ItemType } from '../store';
-import { format } from 'date-fns';
+import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check, RotateCcw, AlertTriangle } from 'lucide-react';
+import { getVaultItem, deleteVaultItem, permanentlyDeleteVaultItem, restoreVaultItem, type ItemType } from '../store';
+import { format, differenceInDays } from 'date-fns';
+import { toast } from 'sonner';
 
 const typeIcons: Record<ItemType, React.ReactNode> = {
   Website: <Globe className="w-5 h-5 text-cyan-400" />,
@@ -27,6 +28,7 @@ export function ItemDetail() {
   const { id } = useParams();
   const [showPassword, setShowPassword] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   const item = id ? getVaultItem(id) : undefined;
@@ -39,6 +41,9 @@ export function ItemDetail() {
     );
   }
 
+  const isTrashed = !!item.deletedAt;
+  const daysRemaining = isTrashed ? Math.max(0, 30 - differenceInDays(new Date(), new Date(item.deletedAt!))) : 0;
+
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(field);
@@ -46,9 +51,35 @@ export function ItemDetail() {
     });
   };
 
-  const handleDelete = async () => {
+  const handleMoveToTrash = async () => {
     await deleteVaultItem(item.id);
+    toast.success('Moved to Trash');
     navigate('/', { replace: true });
+  };
+
+  const handlePermanentDelete = async () => {
+    await permanentlyDeleteVaultItem(item.id);
+    toast.success('Permanently deleted');
+    navigate('/', { replace: true });
+  };
+
+  const handleRestore = async () => {
+    await restoreVaultItem(item.id);
+    toast.success('Restored from Trash');
+    navigate('/', { replace: true });
+  };
+
+  const handleShare = async () => {
+    const text = `${item.title}\nUsername: ${item.username || 'N/A'}\nPassword: ${item.password}${item.url ? `\nURL: ${item.url}` : ''}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: item.title, text });
+      } catch {
+        copyToClipboard(text, 'share');
+      }
+    } else {
+      copyToClipboard(text, 'share');
+    }
   };
 
   const maskedPassword = '\u2022'.repeat(Math.min(item.password.length, 14));
@@ -61,8 +92,8 @@ export function ItemDetail() {
           <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className={`w-8 h-8 rounded-lg ${typeColors[item.type]} flex items-center justify-center`}>
-            {typeIcons[item.type]}
+          <div className={`w-8 h-8 rounded-lg ${isTrashed ? 'bg-red-500/10' : typeColors[item.type]} flex items-center justify-center`}>
+            {isTrashed ? <Trash2 className="w-5 h-5 text-red-400" /> : typeIcons[item.type]}
           </div>
           <h2 className="text-white truncate flex-1">{item.title}</h2>
         </div>
@@ -70,6 +101,21 @@ export function ItemDetail() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+        {/* Trash banner */}
+        {isTrashed && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-400 text-sm font-medium">This item is in Trash</p>
+              <p className="text-gray-400 text-xs mt-0.5">
+                {daysRemaining > 0
+                  ? `Will be permanently deleted in ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`
+                  : 'Scheduled for permanent deletion'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Main info card */}
         <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
           {/* Username */}
@@ -155,57 +201,71 @@ export function ItemDetail() {
             <span className="text-gray-500 text-xs">Last changed</span>
             <span className="text-gray-300 text-xs">{format(new Date(item.updatedAt), 'MMM d, yyyy h:mm a')}</span>
           </div>
+          {isTrashed && item.deletedAt && (
+            <div className="flex justify-between">
+              <span className="text-gray-500 text-xs">Deleted</span>
+              <span className="text-red-400 text-xs">{format(new Date(item.deletedAt), 'MMM d, yyyy h:mm a')}</span>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => navigate(`/edit/${item.id}`)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 transition-colors"
-          >
-            <Pencil className="w-4 h-4" />
-            Edit
-          </button>
-          <button
-            onClick={() => setShowDeleteDialog(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </button>
-          <div className="flex-1 min-w-[20px]" />
-          <button
-            onClick={async () => {
-              const text = `${item.title}\nUsername: ${item.username || 'N/A'}\nPassword: ${item.password}${item.url ? `\nURL: ${item.url}` : ''}`;
-              if (navigator.share) {
-                try {
-                  await navigator.share({
-                    title: item.title,
-                    text: text,
-                  });
-                } catch (error) {
-                  // Fallback to copy if share fails or is cancelled
-                  copyToClipboard(text, 'share');
-                }
-              } else {
-                copyToClipboard(text, 'share');
-              }
-            }}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors"
-          >
-            {copied === 'share' ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
-            {copied === 'share' ? 'Copied' : 'Share'}
-          </button>
-        </div>
+        {isTrashed ? (
+          /* Trashed item actions */
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={handleRestore}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Restore
+            </button>
+            <button
+              onClick={() => setShowPermanentDeleteDialog(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Forever
+            </button>
+          </div>
+        ) : (
+          /* Active item actions */
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              onClick={() => navigate(`/edit/${item.id}`)}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit
+            </button>
+            <button
+              onClick={() => setShowDeleteDialog(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Trash
+            </button>
+            <button
+              onClick={handleShare}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors"
+            >
+              {copied === 'share' ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
+              {copied === 'share' ? 'Copied' : 'Share'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Delete confirmation dialog */}
+      {/* Move to Trash confirmation dialog */}
       {showDeleteDialog && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-6" onClick={() => setShowDeleteDialog(false)}>
           <div className="bg-[#16213e] rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-white mb-2">Delete this item?</h3>
-            <p className="text-gray-400 text-sm mb-6">
-              Are you sure you want to delete "{item.title}"? This action cannot be undone.
+            <h3 className="text-white mb-2">Move to Trash?</h3>
+            <p className="text-gray-400 text-sm mb-1">
+              "{item.title}" will be moved to Trash.
+            </p>
+            <p className="text-gray-500 text-xs mb-6">
+              Items in Trash are permanently deleted after 30 days. You can restore them anytime before that.
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -215,10 +275,36 @@ export function ItemDetail() {
                 Cancel
               </button>
               <button
-                onClick={handleDelete}
+                onClick={handleMoveToTrash}
                 className="px-5 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors"
               >
-                Delete
+                Move to Trash
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent delete confirmation dialog (for trashed items) */}
+      {showPermanentDeleteDialog && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-6" onClick={() => setShowPermanentDeleteDialog(false)}>
+          <div className="bg-[#16213e] rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white mb-2">Delete Permanently?</h3>
+            <p className="text-gray-400 text-sm mb-6">
+              Are you sure you want to permanently delete "{item.title}"? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowPermanentDeleteDialog(false)}
+                className="px-5 py-2 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePermanentDelete}
+                className="px-5 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Delete Forever
               </button>
             </div>
           </div>
