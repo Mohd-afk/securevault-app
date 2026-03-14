@@ -9,6 +9,7 @@ import {
   unlockVault,
   setSessionPassword,
 } from '../store';
+import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
 import { useEffect } from 'react';
 
 interface LockScreenProps {
@@ -56,8 +57,8 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
       if (isSetup) {
         // ── First-time setup ──────────────────────────────────
         log.info('LockScreen: First-time vault setup attempt');
-        if (password.length < 8) {
-          setError('Master password must be at least 8 characters');
+        if (!isPasswordStrong(password)) {
+          setError('Please fix all password requirements below.');
           setLoading(false);
           return;
         }
@@ -132,7 +133,8 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
                 {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
               </button>
             </div>
-          </div>
+            </div>
+            {isSetup && <PasswordStrengthIndicator password={password} />}
 
           {isSetup && (
             <div>

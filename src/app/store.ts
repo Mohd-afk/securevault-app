@@ -238,24 +238,21 @@ async function loadVaultFromStorage(password: string): Promise<VaultItem[]> {
   const email = getUserEmail();
   if (!email) {
     log.warn('loadVaultFromStorage: no email available');
+    throw new Error('No email available for decryption');
+  }
+
+  const payload: EncryptedPayload = JSON.parse(raw);
+  if (!payload.ciphertext || !payload.iv) {
+    log.warn('Local vault payload has no ciphertext/IV');
     return [];
   }
 
-  try {
-    const payload: EncryptedPayload = JSON.parse(raw);
-    if (payload.ciphertext && payload.iv) {
-      const key = await deriveEncryptionKey(password, email);
-      const plaintext = await decryptWithKey(payload, key);
-      const items = JSON.parse(plaintext) as VaultItem[];
-      log.info('Loaded vault from localStorage', { itemCount: items.length });
-      return items;
-    }
-    log.warn('Local vault payload has no ciphertext/IV');
-    return [];
-  } catch (e) {
-    log.error('Failed to decrypt local vault data', e);
-    return [];
-  }
+  // Let decryption errors propagate — wrong password MUST throw
+  const key = await deriveEncryptionKey(password, email);
+  const plaintext = await decryptWithKey(payload, key);
+  const items = JSON.parse(plaintext) as VaultItem[];
+  log.info('Loaded vault from localStorage', { itemCount: items.length });
+  return items;
 }
 
 async function saveVaultToStorage(items: VaultItem[], password: string): Promise<void> {
@@ -311,6 +308,7 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
   const email = getUserEmail();
   let items: VaultItem[] = [];
   let loadedFromCloud = false;
+  let cloudNetworkError = false;
 
   log.info('Unlocking vault', { uid, email: email ? '***' : null });
 
@@ -320,6 +318,7 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
       log.debug('Attempting to load vault from cloud', { uid });
       const cloudData = await loadVaultFromCloud(uid);
       if (cloudData?.encryptedPayload) {
+        // Decrypt — if password is wrong this THROWS (AES-GCM auth tag mismatch)
         const key = await deriveEncryptionKey(password, email);
         const plaintext = await decryptWithKey(cloudData.encryptedPayload, key);
         items = JSON.parse(plaintext);
@@ -328,18 +327,34 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
         localStorage.setItem(VAULT_KEY, JSON.stringify(cloudData.encryptedPayload));
         log.info('Vault loaded from cloud', { itemCount: items.length });
       } else {
-        log.info('No vault data in cloud');
+        log.info('No vault data in cloud (new user)');
+        // No vault exists yet — this is NOT an error, just a new user
+        loadedFromCloud = true; // prevent local fallback
       }
     } catch (e) {
-      log.error('Failed to load vault from cloud, falling back to local', e);
+      // Distinguish between NETWORK errors and DECRYPTION errors
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('network') || message.includes('unavailable') || message.includes('Failed to get document')) {
+        log.warn('Network error loading vault, will try local fallback', e);
+        cloudNetworkError = true;
+      } else {
+        // Decryption failure = WRONG PASSWORD. Do NOT fall back to local.
+        log.error('Vault decryption failed — wrong master password', e);
+        throw new Error('WRONG_PASSWORD');
+      }
     }
   }
 
-  // Fall back to local ONLY if cloud didn't provide data
-  if (!loadedFromCloud) {
-    log.debug('Loading vault from local storage as fallback');
+  // Fall back to local ONLY on network errors (not decryption failures)
+  if (!loadedFromCloud && cloudNetworkError) {
+    log.debug('Loading vault from local storage as network fallback');
+    // This will also throw if decryption fails (wrong password)
     items = await loadVaultFromStorage(password);
     log.info('Vault loaded from local storage', { itemCount: items.length });
+  } else if (!loadedFromCloud && !uid) {
+    // No user ID — try local (shouldn't normally happen)
+    items = await loadVaultFromStorage(password);
+    log.info('Vault loaded from local storage (no uid)', { itemCount: items.length });
   }
 
   _sessionPassword = password;
