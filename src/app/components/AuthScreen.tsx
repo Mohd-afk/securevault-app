@@ -44,7 +44,7 @@ const log = createLogger('UI');
 // ── Component ────────────────────────────────────────────────────────
 
 interface AuthScreenProps {
-    onAuthenticated: () => void;
+    onAuthenticated: (shouldAutoUnlock?: boolean) => void;
 }
 
 export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
@@ -141,7 +141,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             // Load and decrypt vault data from cloud so it's ready immediately
             await unlockVault(password);
             log.info('Login successful, vault unlocked');
-            onAuthenticated();
+            onAuthenticated(true);
         } catch (err: unknown) {
             log.error('Login failed', err);
             // Generic message for security (don't reveal if user or pass is wrong)
@@ -215,8 +215,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             if (hasVault) {
                 // Returning user — they already set up a vault before.
-                // Go to the main app where AppShell will show LockScreen.
-                onAuthenticated();
+                // Do NOT auto-unlock; send them to LockScreen for master password.
+                onAuthenticated(false);
             } else {
                 // New user — needs to create a master password for encryption.
                 setMode('setup_master');
@@ -341,7 +341,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             setSessionPassword(password);
             log.info('Master password setup complete, vault created');
-            onAuthenticated();
+            onAuthenticated(true);
         } catch (err: unknown) {
             log.error('Master password setup failed', err);
             setError('Failed to create vault. Please check your connection and try again.');
