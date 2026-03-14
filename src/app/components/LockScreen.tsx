@@ -67,6 +67,25 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
           setLoading(false);
           return;
         }
+
+        try {
+          if (userEmail) {
+            log.info('LockScreen: Linking master password to user account', { userEmail });
+            const { deriveAuthKey } = await import('../crypto');
+            const { finalizeMasterPasswordSetup } = await import('../auth');
+            const authKey = await deriveAuthKey(password, userEmail);
+            await finalizeMasterPasswordSetup(userEmail, authKey);
+          }
+        } catch (linkError: any) {
+          log.error('LockScreen: Failed to link master password to account', linkError);
+          const errorMsg = linkError?.code === 'auth/requires-recent-login' 
+            ? 'Session expired. Please sign out and sign in again to set up your vault.'
+            : 'Failed to link master password. Please try again.';
+          setError(errorMsg);
+          setLoading(false);
+          return;
+        }
+
         await setupInitialVault(password);
         setSessionPassword(password);
         log.info('LockScreen: Initial vault setup complete');

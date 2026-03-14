@@ -64,26 +64,24 @@ export async function finishPasswordlessSignIn(href: string): Promise<User> {
 export async function finalizeMasterPasswordSetup(email: string, authKey: string): Promise<User> {
     const user = auth.currentUser;
     if (!user) throw new Error('No user is currently signed in to set the password.');
-    log.info('Finalizing master password setup', { uid: user.uid });
     
-    // Check if the user already has the "password" provider linked
-    const hasPasswordProvider = user.providerData.some(provider => provider.providerId === 'password');
-    
-    if (hasPasswordProvider) {
-        log.info('User has password provider, updating password');
-        await updatePassword(user, authKey);
-    } else {
-        log.info('User lacks password provider, linking Email/Password credential');
-        try {
+    try {
+        const hasPasswordProvider = user.providerData.some(p => p.providerId === "password");
+
+        if (!hasPasswordProvider) {
+            console.log("Linking password provider...");
             const credential = EmailAuthProvider.credential(email, authKey);
             await linkWithCredential(user, credential);
-        } catch (error) {
-            log.error('Failed to link Email/Password credential', error);
-            throw error;
+            console.log("Password provider linked successfully");
+        } else {
+            console.log("Password provider already exists");
+            await updatePassword(user, authKey);
         }
+    } catch (error) {
+        console.error("LINKING ERROR:", error);
+        throw error; // keep rejecting so the UI knows it failed
     }
     
-    log.info('Firebase Auth password configured successfully', { uid: user.uid });
     return user;
 }
 
