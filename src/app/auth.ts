@@ -74,8 +74,13 @@ export async function finalizeMasterPasswordSetup(email: string, authKey: string
         await updatePassword(user, authKey);
     } else {
         log.info('User lacks password provider, linking Email/Password credential');
-        const credential = EmailAuthProvider.credential(email, authKey);
-        await linkWithCredential(user, credential);
+        try {
+            const credential = EmailAuthProvider.credential(email, authKey);
+            await linkWithCredential(user, credential);
+        } catch (error) {
+            log.error('Failed to link Email/Password credential', error);
+            throw error;
+        }
     }
     
     log.info('Firebase Auth password configured successfully', { uid: user.uid });
