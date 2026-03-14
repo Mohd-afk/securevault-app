@@ -21,6 +21,7 @@ interface LockScreenProps {
 
 export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
+  const [isAutoUnlocking, setIsAutoUnlocking] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -34,12 +35,12 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
     hasConfiguredVault().then(async (has) => {
       if (!cancelled) {
         log.info('LockScreen: Vault configured check result', { hasVault: has, isSetup: !has });
-        setIsSetup(!has);
 
         if (has) {
           const autoUnlockPwd = getAndClearPendingAutoUnlockPassword();
           if (autoUnlockPwd) {
             log.info('LockScreen: Found pending auto-unlock password, attempting auto-unlock');
+            setIsAutoUnlocking(true);
             try {
               setPassword(autoUnlockPwd);
               setLoading(true);
@@ -54,9 +55,15 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
               if (!cancelled) {
                 setError('Session expired or incorrect password. Please unlock again.');
                 setLoading(false);
+                setIsAutoUnlocking(false);
+                setIsSetup(!has);
               }
             }
+          } else {
+            setIsSetup(!has);
           }
+        } else {
+          setIsSetup(!has);
         }
       }
     });
@@ -64,8 +71,8 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Show loader while checking
-  if (isSetup === null) {
+  // Show loader while checking or auto-unlocking
+  if (isSetup === null || isAutoUnlocking) {
     return (
       <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
