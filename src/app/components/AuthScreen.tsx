@@ -30,6 +30,7 @@ import {
     setupInitialVault,
     setSessionPassword,
     resetVault,
+    setPendingAutoUnlockPassword,
 } from '../store';
 import { checkUsernameAvailable, claimUsername, checkEmailRegistered, registerEmail } from '../firestore';
 import { getCurrentUser } from '../auth';
@@ -140,6 +141,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             // Session password state is updated globally when `LockScreen` 
             // is unlocked correctly in the next application state loop.
             log.info('Login successful');
+            setPendingAutoUnlockPassword(password);
             onAuthenticated();
         } catch (err: unknown) {
             log.error('Login failed', err);

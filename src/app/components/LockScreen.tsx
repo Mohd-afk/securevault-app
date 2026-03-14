@@ -8,6 +8,7 @@ import {
   setupInitialVault,
   unlockVault,
   setSessionPassword,
+  getAndClearPendingAutoUnlockPassword,
 } from '../store';
 import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
 import { useEffect } from 'react';
@@ -30,13 +31,37 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
   useEffect(() => {
     let cancelled = false;
     log.info('LockScreen: Checking if vault is configured');
-    hasConfiguredVault().then((has) => {
+    hasConfiguredVault().then(async (has) => {
       if (!cancelled) {
         log.info('LockScreen: Vault configured check result', { hasVault: has, isSetup: !has });
         setIsSetup(!has);
+
+        if (has) {
+          const autoUnlockPwd = getAndClearPendingAutoUnlockPassword();
+          if (autoUnlockPwd) {
+            log.info('LockScreen: Found pending auto-unlock password, attempting auto-unlock');
+            try {
+              setPassword(autoUnlockPwd);
+              setLoading(true);
+              setError('');
+              await unlockVault(autoUnlockPwd);
+              log.info('LockScreen: Auto-unlock successful');
+              if (!cancelled) {
+                onUnlock();
+              }
+            } catch (e) {
+              log.error('LockScreen: Auto-unlock failed', e);
+              if (!cancelled) {
+                setError('Session expired or incorrect password. Please unlock again.');
+                setLoading(false);
+              }
+            }
+          }
+        }
       }
     });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Show loader while checking

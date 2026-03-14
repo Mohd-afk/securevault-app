@@ -49,6 +49,7 @@ const SETTINGS_KEY = 'securevault_settings';
 // ── In-memory session state ──────────────────────────────────────────
 
 let _sessionPassword: string | null = null;
+let _pendingAutoUnlockPassword: string | null = null;
 let _cachedItems: VaultItem[] | null = null;
 let _unsubscribeVault: (() => void) | null = null;
 let _vaultChangeListeners: Array<(items: VaultItem[]) => void> = [];
@@ -65,6 +66,7 @@ export function setSessionPassword(password: string): void {
 export function clearSession(): void {
   log.info('Clearing session (password, cache, listeners)');
   _sessionPassword = null;
+  _pendingAutoUnlockPassword = null;
   _cachedItems = null;
   if (_unsubscribeVault) {
     _unsubscribeVault();
@@ -85,6 +87,16 @@ export function clearLocalVaultData(): void {
 
 export function getSessionPassword(): string | null {
   return _sessionPassword;
+}
+
+export function setPendingAutoUnlockPassword(password: string): void {
+  _pendingAutoUnlockPassword = password;
+}
+
+export function getAndClearPendingAutoUnlockPassword(): string | null {
+  const pwd = _pendingAutoUnlockPassword;
+  _pendingAutoUnlockPassword = null;
+  return pwd;
 }
 
 // ── Vault change listeners (for real-time sync UI updates) ──────────
@@ -677,7 +689,7 @@ export async function changeMasterPassword(
     // 2. Derive the new auth key and update Firebase Auth password
     log.debug('Step 2: Updating Firebase Auth password with new derived key');
     const newAuthKey = await deriveAuthKey(newPassword, email);
-    await finalizeMasterPasswordSetup(newAuthKey);
+    await finalizeMasterPasswordSetup(email, newAuthKey);
     log.info('Firebase Auth password updated to new derived key');
 
     // 3. Re-encrypt vault data with the new encryption key
