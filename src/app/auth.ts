@@ -14,6 +14,7 @@ import {
     updatePassword,
     EmailAuthProvider,
     reauthenticateWithCredential,
+    linkWithCredential,
     type User,
 } from 'firebase/auth';
 import { auth } from './firebase';
@@ -60,12 +61,24 @@ export async function finishPasswordlessSignIn(href: string): Promise<User> {
     return result.user;
 }
 
-export async function finalizeMasterPasswordSetup(authKey: string): Promise<User> {
+export async function finalizeMasterPasswordSetup(email: string, authKey: string): Promise<User> {
     const user = auth.currentUser;
     if (!user) throw new Error('No user is currently signed in to set the password.');
-    log.info('Finalizing master password setup (updatePassword)', { uid: user.uid });
-    await updatePassword(user, authKey);
-    log.info('Firebase Auth password updated successfully', { uid: user.uid });
+    log.info('Finalizing master password setup', { uid: user.uid });
+    
+    // Check if the user already has the "password" provider linked
+    const hasPasswordProvider = user.providerData.some(provider => provider.providerId === 'password');
+    
+    if (hasPasswordProvider) {
+        log.info('User has password provider, updating password');
+        await updatePassword(user, authKey);
+    } else {
+        log.info('User lacks password provider, linking Email/Password credential');
+        const credential = EmailAuthProvider.credential(email, authKey);
+        await linkWithCredential(user, credential);
+    }
+    
+    log.info('Firebase Auth password configured successfully', { uid: user.uid });
     return user;
 }
 

@@ -322,7 +322,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             // Derive Auth Key and update Firebase Auth password
             const authKey = await deriveAuthKey(password, email);
-            await finalizeMasterPasswordSetup(authKey);
+            await finalizeMasterPasswordSetup(email, authKey);
 
             // Generate the encrypted vault and push to Firestore
             await setupInitialVault(password);
