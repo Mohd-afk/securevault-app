@@ -150,16 +150,12 @@ export function AppShell() {
   // ── Gate 1: Auth & Magic Links ───────────────────────────────────
   // If no user, OR we are actively processing a magic link setup
   if (!user || magicLinkActive) {
-    return <AuthScreen onAuthenticated={(shouldAutoUnlock?: boolean) => {
+    return <AuthScreen onAuthenticated={() => {
       // Completed account authentication
       setMagicLinkActive(false);
       setUser(auth.currentUser);
-      // Only auto-unlock if user just entered their master password
-      // (email login, magic link setup, new Google user setup)
-      // Returning Google users get sent to LockScreen instead
-      if (shouldAutoUnlock) {
-        setUnlocked(true);
-      }
+      // Force all users to LockScreen to manage their vault state
+      setUnlocked(false);
     }} />;
   }
 

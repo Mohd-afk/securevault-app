@@ -29,7 +29,6 @@ import {
     hasConfiguredVault,
     setupInitialVault,
     setSessionPassword,
-    unlockVault,
     resetVault,
 } from '../store';
 import { checkUsernameAvailable, claimUsername, checkEmailRegistered, registerEmail } from '../firestore';
@@ -44,7 +43,7 @@ const log = createLogger('UI');
 // ── Component ────────────────────────────────────────────────────────
 
 interface AuthScreenProps {
-    onAuthenticated: (shouldAutoUnlock?: boolean) => void;
+    onAuthenticated: () => void;
 }
 
 export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
@@ -138,10 +137,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             // They successfully authenticated. The session password state is updated
             // globally when `LockScreen` is bypassed or explicitly through `store.ts`.
-            // Load and decrypt vault data from cloud so it's ready immediately
-            await unlockVault(password);
-            log.info('Login successful, vault unlocked');
-            onAuthenticated(true);
+            // Session password state is updated globally when `LockScreen` 
+            // is unlocked correctly in the next application state loop.
+            log.info('Login successful');
+            onAuthenticated();
         } catch (err: unknown) {
             log.error('Login failed', err);
             // Generic message for security (don't reveal if user or pass is wrong)
@@ -215,8 +214,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             if (hasVault) {
                 // Returning user — they already set up a vault before.
-                // Do NOT auto-unlock; send them to LockScreen for master password.
-                onAuthenticated(false);
+                // Authenticate and let AppShell route to LockScreen.
+                onAuthenticated();
             } else {
                 // New user — needs to create a master password for encryption.
                 setMode('setup_master');
@@ -341,7 +340,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             setSessionPassword(password);
             log.info('Master password setup complete, vault created');
-            onAuthenticated(true);
+            onAuthenticated();
         } catch (err: unknown) {
             log.error('Master password setup failed', err);
             setError('Failed to create vault. Please check your connection and try again.');
