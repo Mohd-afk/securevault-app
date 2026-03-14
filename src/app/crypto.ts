@@ -4,6 +4,10 @@
 //   • AES-GCM (256-bit) for vault encryption/decryption
 // ─────────────────────────────────────────────────────────────────────
 
+import { createLogger } from './utils/logger';
+
+const log = createLogger('CRYPTO');
+
 const PBKDF2_ITERATIONS = 600_000;
 const KEY_LENGTH = 256; // bits
 const IV_BYTES = 12; // AES-GCM recommended IV size
@@ -53,6 +57,7 @@ async function getKeyMaterial(password: string): Promise<CryptoKey> {
  * Salt: email
  */
 export async function deriveAuthKey(masterPassword: string, email: string): Promise<string> {
+    log.debug('Deriving auth key', { email, iterations: PBKDF2_ITERATIONS });
     const keyMaterial = await getKeyMaterial(masterPassword);
     const saltBuffer = new TextEncoder().encode(email.toLowerCase().trim());
 
@@ -66,6 +71,7 @@ export async function deriveAuthKey(masterPassword: string, email: string): Prom
         keyMaterial,
         KEY_LENGTH,
     );
+    log.debug('Auth key derived successfully');
     return toBase64(derivedBits);
 }
 
@@ -74,10 +80,11 @@ export async function deriveAuthKey(masterPassword: string, email: string): Prom
  * Salt: email + "vault"
  */
 export async function deriveEncryptionKey(masterPassword: string, email: string): Promise<CryptoKey> {
+    log.debug('Deriving encryption key', { email, iterations: PBKDF2_ITERATIONS });
     const keyMaterial = await getKeyMaterial(masterPassword);
     const saltBuffer = new TextEncoder().encode(email.toLowerCase().trim() + 'vault');
 
-    return crypto.subtle.deriveKey(
+    const key = await crypto.subtle.deriveKey(
         {
             name: 'PBKDF2',
             salt: saltBuffer,
@@ -89,6 +96,8 @@ export async function deriveEncryptionKey(masterPassword: string, email: string)
         false, // Do not make it extractable
         ['encrypt', 'decrypt'],
     );
+    log.debug('Encryption key derived successfully');
+    return key;
 }
 
 // ── Encryption ───────────────────────────────────────────────────────
@@ -102,6 +111,7 @@ export async function encryptWithKey(
     plaintext: string,
     key: CryptoKey,
 ): Promise<EncryptedPayload> {
+    log.debug('Encrypting data', { plaintextLength: plaintext.length });
     const iv = generateIV();
     const encoder = new TextEncoder();
     const encrypted = await crypto.subtle.encrypt(
@@ -110,6 +120,7 @@ export async function encryptWithKey(
         encoder.encode(plaintext),
     );
 
+    log.debug('Encryption successful', { ciphertextLength: encrypted.byteLength });
     return {
         ciphertext: toBase64(encrypted),
         iv: toBase64(iv.buffer.slice(0) as ArrayBuffer),
@@ -122,6 +133,7 @@ export async function decryptWithKey(
     payload: EncryptedPayload,
     key: CryptoKey,
 ): Promise<string> {
+    log.debug('Decrypting data', { ciphertextLength: payload.ciphertext.length });
     const iv = new Uint8Array(fromBase64(payload.iv));
     const ciphertext = fromBase64(payload.ciphertext);
 
@@ -131,5 +143,7 @@ export async function decryptWithKey(
         ciphertext,
     );
 
-    return new TextDecoder().decode(decrypted);
+    const plaintext = new TextDecoder().decode(decrypted);
+    log.debug('Decryption successful', { plaintextLength: plaintext.length });
+    return plaintext;
 }

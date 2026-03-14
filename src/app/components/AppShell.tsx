@@ -6,6 +6,9 @@ import { getSettings, clearSession, clearLocalVaultData, getVaultItems, permanen
 import { onAuthChange, signOut, isVerificationLink } from '../auth';
 import { auth } from '../firebase';
 import type { User } from 'firebase/auth';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('UI');
 
 export function AppShell() {
   const [authLoading, setAuthLoading] = useState(true);
@@ -19,6 +22,7 @@ export function AppShell() {
   // Check on mount if we're entering via a magic link
   useEffect(() => {
     if (isVerificationLink(window.location.href)) {
+      log.info('AppShell: Magic link detected on mount');
       setMagicLinkActive(true);
     }
   }, []);
@@ -28,6 +32,7 @@ export function AppShell() {
     const unsubscribe = onAuthChange((firebaseUser) => {
       // If switching to a DIFFERENT user, clear stale local data
       if (firebaseUser && user && firebaseUser.uid !== user.uid) {
+        log.info('AppShell: User switched, clearing stale data', { oldUid: user.uid, newUid: firebaseUser.uid });
         clearLocalVaultData();
         clearSession();
       }
@@ -35,6 +40,7 @@ export function AppShell() {
       setAuthLoading(false);
       // If user signs out, reset unlock state
       if (!firebaseUser) {
+        log.info('AppShell: User signed out, resetting state');
         setUnlocked(false);
         clearSession();
       }
@@ -43,11 +49,13 @@ export function AppShell() {
   }, [user]);
 
   const handleLock = useCallback(() => {
+    log.info('AppShell: Vault locked');
     clearSession();
     setUnlocked(false);
   }, []);
 
   const handleSignOut = useCallback(async () => {
+    log.info('AppShell: Signing out');
     // If we were processing a magic link but decided to sign out
     setMagicLinkActive(false);
     clearSession();
@@ -55,8 +63,9 @@ export function AppShell() {
     setUnlocked(false);
     try {
       await signOut();
-    } catch {
-      // Ignore sign-out errors
+      log.info('AppShell: Sign-out complete');
+    } catch (e) {
+      log.error('AppShell: Sign-out error (ignored)', e);
     }
   }, []);
 

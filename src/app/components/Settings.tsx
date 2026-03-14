@@ -156,22 +156,23 @@ export function Settings() {
 
         setChangingPassword(true);
         try {
-            // Verify the current password first
-            const verified = await verifyMasterPassword(currentPassword);
-            if (!verified) {
-                setChangeError('Current password is incorrect');
-                setChangingPassword(false);
-                return;
-            }
-            const success = await changeMasterPassword(newPassword);
+            // changeMasterPassword handles re-auth internally with old password
+            const success = await changeMasterPassword(currentPassword, newPassword);
             if (success) {
                 toast.success('Master password changed. Please log in again.');
                 await handleSignOut();
             } else {
                 setChangeError('Failed to change password');
             }
-        } catch {
-            setChangeError('An error occurred. Please try again.');
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            if (message.includes('auth/wrong-password') || message.includes('auth/invalid-credential')) {
+                setChangeError('Current password is incorrect.');
+            } else if (message.includes('auth/requires-recent-login')) {
+                setChangeError('Session expired. Please sign out and sign in again before changing your password.');
+            } else {
+                setChangeError('An error occurred. Please try again.');
+            }
         }
         setChangingPassword(false);
     };

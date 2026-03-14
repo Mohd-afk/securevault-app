@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('UI');
 import { Shield, Eye, EyeOff, KeyRound, LogOut } from 'lucide-react';
 import {
   hasConfiguredVault,
@@ -25,8 +28,12 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
   // Check if the user has a configured vault
   useEffect(() => {
     let cancelled = false;
+    log.info('LockScreen: Checking if vault is configured');
     hasConfiguredVault().then((has) => {
-      if (!cancelled) setIsSetup(!has);
+      if (!cancelled) {
+        log.info('LockScreen: Vault configured check result', { hasVault: has, isSetup: !has });
+        setIsSetup(!has);
+      }
     });
     return () => { cancelled = true; };
   }, []);
@@ -48,6 +55,7 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
     try {
       if (isSetup) {
         // ── First-time setup ──────────────────────────────────
+        log.info('LockScreen: First-time vault setup attempt');
         if (password.length < 8) {
           setError('Master password must be at least 8 characters');
           setLoading(false);
@@ -60,17 +68,17 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
         }
         await setupInitialVault(password);
         setSessionPassword(password);
+        log.info('LockScreen: Initial vault setup complete');
         onUnlock();
       } else {
         // ── Returning user unlock ─────────────────────────────
-        // Go straight to unlockVault — it loads from cloud, derives the key,
-        // and decrypts in a single pass. If the password is wrong, decryption
-        // throws and we land in the catch block. This avoids running PBKDF2
-        // multiple times (verify → unlock → migrate was 3x before).
+        log.info('LockScreen: Returning user unlock attempt');
         try {
           await unlockVault(password);
+          log.info('LockScreen: Unlock successful');
           onUnlock();
-        } catch {
+        } catch (e) {
+          log.error('LockScreen: Unlock failed (wrong password or decrypt error)', e);
           setError('Incorrect master password');
         }
       }

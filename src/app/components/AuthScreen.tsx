@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import jsPDF from 'jspdf';
+import { createLogger } from '../utils/logger';
 import {
     Shield,
     Mail,
@@ -37,6 +38,8 @@ import { getCurrentUser } from '../auth';
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'verify' | 'setup_master' | 'processing_link';
 
 import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
+
+const log = createLogger('UI');
 
 // ── Component ────────────────────────────────────────────────────────
 
@@ -96,6 +99,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     useEffect(() => {
         const checkMagicLink = async () => {
             if (isVerificationLink(window.location.href)) {
+                log.info('Magic link detected in URL, processing...');
                 setMode('processing_link');
                 try {
                     const user = await finishPasswordlessSignIn(window.location.href);
@@ -108,8 +112,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     // Clean the URL bar so they don't refresh the magic link
                     window.history.replaceState(null, '', window.location.pathname);
 
+                    log.info('Magic link processing complete, entering setup_master mode', { email: user.email, isResetFlow: hasVault });
                     setMode('setup_master');
                 } catch (err: unknown) {
+                    log.error('Magic link processing failed', err);
                     setError('Verification link is invalid or expired. Please try again.');
                     setMode('signin');
                 }
@@ -125,6 +131,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         setLoading(true);
 
         try {
+            log.info('Login attempt starting', { email });
             // First derive the auth key
             const authKey = await deriveAuthKey(password, email);
             await signInWithDerivedKey(email, authKey);
@@ -133,8 +140,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             // globally when `LockScreen` is bypassed or explicitly through `store.ts`.
             // Load and decrypt vault data from cloud so it's ready immediately
             await unlockVault(password);
+            log.info('Login successful, vault unlocked');
             onAuthenticated();
         } catch (err: unknown) {
+            log.error('Login failed', err);
             // Generic message for security (don't reveal if user or pass is wrong)
             setError('Incorrect email or Master Password.');
         }
@@ -148,10 +157,19 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         setLoading(true);
 
         try {
+            const isRegistered = await checkEmailRegistered(email);
+
             if (mode === 'signup') {
-                const exists = await checkEmailRegistered(email);
-                if (exists) {
+                // Block signup if email is already registered
+                if (isRegistered) {
                     setError('EMAIL_EXISTS');
+                    setLoading(false);
+                    return;
+                }
+            } else if (mode === 'forgot') {
+                // Block forgot-password if email has never been registered
+                if (!isRegistered) {
+                    setError('No account found with this email. Please create an account first.');
                     setLoading(false);
                     return;
                 }
@@ -189,6 +207,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         try {
             const user = await signInWithGoogle();
             clearTimeout(safetyTimeout);
+            log.info('Google sign-in completed', { uid: user.uid, email: user.email });
             setEmail(user.email ?? '');
 
             // Check if this Google user already has a vault
@@ -266,6 +285,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const handleSetupMaster = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        log.info('Master password setup starting', { isResetFlow, email });
 
         if (!isPasswordStrong(password)) {
             setError('Please fix all password requirements below.');
@@ -320,8 +340,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             await registerEmail(email);
 
             setSessionPassword(password);
+            log.info('Master password setup complete, vault created');
             onAuthenticated();
-        } catch {
+        } catch (err: unknown) {
+            log.error('Master password setup failed', err);
             setError('Failed to create vault. Please check your connection and try again.');
         }
         setLoading(false);
