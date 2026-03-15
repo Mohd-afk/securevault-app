@@ -26,7 +26,16 @@ interface OutletContext {
 export function Settings() {
     const navigate = useNavigate();
     const { onSignOut, user } = useOutletContext<OutletContext>();
-    const [settings, setSettings] = useState<AppSettings>(getSettings);
+    const [settings, setSettings] = useState<AppSettings>({
+        autoLockTimeout: 5,
+        lockOnHide: true,
+        allowScreenshots: true,
+    });
+
+    // Load settings asynchronously from IndexedDB on mount
+    useEffect(() => {
+        getSettings().then(setSettings);
+    }, []);
 
     // Password change form
     const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -130,7 +139,7 @@ export function Settings() {
     const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
         const updated = { ...settings, [key]: value };
         setSettings(updated);
-        saveSettings(updated);
+        saveSettings(updated); // fire-and-forget async
     };
 
     const handleChangePassword = async () => {

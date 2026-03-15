@@ -33,7 +33,7 @@ export function AppShell() {
       // If switching to a DIFFERENT user, clear stale local data
       if (firebaseUser && user && firebaseUser.uid !== user.uid) {
         log.info('AppShell: User switched, clearing stale data', { oldUid: user.uid, newUid: firebaseUser.uid });
-        clearLocalVaultData();
+        clearLocalVaultData().catch(console.error);
         clearSession();
       }
       setUser(firebaseUser);
@@ -59,7 +59,7 @@ export function AppShell() {
     // If we were processing a magic link but decided to sign out
     setMagicLinkActive(false);
     clearSession();
-    clearLocalVaultData();
+    clearLocalVaultData().catch(console.error);
     setUnlocked(false);
     try {
       await signOut();
@@ -90,23 +90,34 @@ export function AppShell() {
   useEffect(() => {
     if (!unlocked) return;
 
-    const settings = getSettings();
-    if (settings.autoLockTimeout === 0) return;
+    let cancelled = false;
 
-    const timeoutMs = settings.autoLockTimeout * 60 * 1000;
+    getSettings().then((settings) => {
+      if (cancelled || settings.autoLockTimeout === 0) return;
 
-    const resetTimer = () => {
-      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-      inactivityTimer.current = setTimeout(handleLock, timeoutMs);
-    };
+      const timeoutMs = settings.autoLockTimeout * 60 * 1000;
 
-    const events = ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'];
-    events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
-    resetTimer();
+      const resetTimer = () => {
+        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+        inactivityTimer.current = setTimeout(handleLock, timeoutMs);
+      };
+
+      const events = ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'];
+      events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
+      resetTimer();
+
+      // Store cleanup for this specific invocation
+      cleanupRef.current = () => {
+        events.forEach((e) => window.removeEventListener(e, resetTimer));
+        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      };
+    });
+
+    const cleanupRef = { current: null as (() => void) | null };
 
     return () => {
-      events.forEach((e) => window.removeEventListener(e, resetTimer));
-      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      cancelled = true;
+      cleanupRef.current?.();
     };
   }, [unlocked, handleLock]);
 
@@ -114,24 +125,34 @@ export function AppShell() {
   useEffect(() => {
     if (!unlocked) return;
 
-    const settings = getSettings();
-    if (!settings.lockOnHide) return;
+    let cancelled = false;
 
-    const handleVisibility = () => {
-      if (document.hidden) {
-        visibilityTimer.current = setTimeout(handleLock, 30_000);
-      } else {
-        if (visibilityTimer.current) {
-          clearTimeout(visibilityTimer.current);
-          visibilityTimer.current = null;
+    getSettings().then((settings) => {
+      if (cancelled || !settings.lockOnHide) return;
+
+      const handleVisibility = () => {
+        if (document.hidden) {
+          visibilityTimer.current = setTimeout(handleLock, 30_000);
+        } else {
+          if (visibilityTimer.current) {
+            clearTimeout(visibilityTimer.current);
+            visibilityTimer.current = null;
+          }
         }
-      }
-    };
+      };
 
-    document.addEventListener('visibilitychange', handleVisibility);
+      document.addEventListener('visibilitychange', handleVisibility);
+      cleanupRef.current = () => {
+        document.removeEventListener('visibilitychange', handleVisibility);
+        if (visibilityTimer.current) clearTimeout(visibilityTimer.current);
+      };
+    });
+
+    const cleanupRef = { current: null as (() => void) | null };
+
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      if (visibilityTimer.current) clearTimeout(visibilityTimer.current);
+      cancelled = true;
+      cleanupRef.current?.();
     };
   }, [unlocked, handleLock]);
 

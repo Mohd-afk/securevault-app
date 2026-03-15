@@ -14,6 +14,7 @@ import {
   loadSettingsFromCloud,
   deleteCloudVault,
 } from './firestore';
+import { idbGet, idbSet, idbDelete } from './idb';
 import { createLogger } from './utils/logger';
 
 const log = createLogger('STORE');
@@ -76,13 +77,13 @@ export function clearSession(): void {
 }
 
 /**
- * Clear all localStorage vault data.
+ * Clear all IndexedDB vault data.
  * Called on sign-out to prevent stale data from leaking to the next user.
  */
-export function clearLocalVaultData(): void {
-  log.info('Clearing local vault data from localStorage');
-  localStorage.removeItem(VAULT_KEY);
-  localStorage.removeItem(SETTINGS_KEY);
+export async function clearLocalVaultData(): Promise<void> {
+  log.info('Clearing local vault data from IndexedDB');
+  await idbDelete(VAULT_KEY);
+  await idbDelete(SETTINGS_KEY);
 }
 
 export function getSessionPassword(): string | null {
@@ -145,8 +146,8 @@ export async function setupInitialVault(password: string): Promise<void> {
   const key = await deriveEncryptionKey(password, email);
   const emptyPayload = await encryptWithKey('[]', key);
 
-  localStorage.setItem(VAULT_KEY, JSON.stringify(emptyPayload));
-  log.debug('Empty vault saved to localStorage');
+  await idbSet(VAULT_KEY, emptyPayload);
+  log.debug('Empty vault saved to IndexedDB');
 
   const uid = getUid();
   if (uid) {
@@ -168,7 +169,7 @@ export async function verifyMasterPassword(password: string): Promise<boolean> {
   log.info('Verifying master password');
 
   const uid = getUid();
-  let encryptedDataRaw: string | null = null;
+  let encryptedPayload: EncryptedPayload | null = null;
 
   // Try loading from cloud first
   if (uid) {
@@ -176,8 +177,8 @@ export async function verifyMasterPassword(password: string): Promise<boolean> {
       log.debug('Loading vault from cloud for verification', { uid });
       const cloudData = await loadVaultFromCloud(uid);
       if (cloudData?.encryptedPayload) {
-        encryptedDataRaw = JSON.stringify(cloudData.encryptedPayload);
-        localStorage.setItem(VAULT_KEY, encryptedDataRaw);
+        encryptedPayload = cloudData.encryptedPayload;
+        await idbSet(VAULT_KEY, encryptedPayload);
         log.debug('Cloud vault data loaded for verification');
       } else {
         log.debug('No cloud vault data found');
@@ -188,26 +189,25 @@ export async function verifyMasterPassword(password: string): Promise<boolean> {
   }
 
   // Fallback to local
-  if (!encryptedDataRaw) {
-    encryptedDataRaw = localStorage.getItem(VAULT_KEY);
-    log.debug('Using local vault data for verification', { hasData: !!encryptedDataRaw });
+  if (!encryptedPayload) {
+    encryptedPayload = await idbGet<EncryptedPayload>(VAULT_KEY);
+    log.debug('Using local vault data for verification', { hasData: !!encryptedPayload });
   }
 
-  if (!encryptedDataRaw) {
+  if (!encryptedPayload) {
     log.warn('No vault data found anywhere — verification fails');
     return false;
   }
 
   try {
-    const payload: EncryptedPayload = JSON.parse(encryptedDataRaw);
-    if (!payload.ciphertext || !payload.iv) {
+    if (!encryptedPayload.ciphertext || !encryptedPayload.iv) {
       log.warn('Vault payload is missing ciphertext or IV');
       return false;
     }
 
     // Attempt decryption
     const key = await deriveEncryptionKey(password, email);
-    await decryptWithKey(payload, key);
+    await decryptWithKey(encryptedPayload, key);
     log.info('Master password verified successfully (decryption succeeded)');
     return true; // Decryption succeeded!
   } catch {
@@ -224,7 +224,7 @@ export async function hasConfiguredVault(): Promise<boolean> {
     try {
       const cloudData = await loadVaultFromCloud(uid);
       if (cloudData?.encryptedPayload) {
-        localStorage.setItem(VAULT_KEY, JSON.stringify(cloudData.encryptedPayload));
+        await idbSet(VAULT_KEY, cloudData.encryptedPayload);
         log.info('Vault exists in cloud', { uid });
         return true;
       }
@@ -234,17 +234,17 @@ export async function hasConfiguredVault(): Promise<boolean> {
       log.error('Network error checking vault status', e);
     }
   }
-  const hasLocal = !!localStorage.getItem(VAULT_KEY);
-  log.debug('Vault configured (local check)', { hasLocal });
-  return hasLocal;
+  const localData = await idbGet(VAULT_KEY);
+  log.debug('Vault configured (local check)', { hasLocal: !!localData });
+  return !!localData;
 }
 
 // ── Encrypted vault local ops ────────────────────────────────────────
 
 async function loadVaultFromStorage(password: string): Promise<VaultItem[]> {
-  const raw = localStorage.getItem(VAULT_KEY);
-  if (!raw) {
-    log.debug('No local vault data in localStorage');
+  const payload = await idbGet<EncryptedPayload>(VAULT_KEY);
+  if (!payload) {
+    log.debug('No local vault data in IndexedDB');
     return [];
   }
   const email = getUserEmail();
@@ -253,7 +253,6 @@ async function loadVaultFromStorage(password: string): Promise<VaultItem[]> {
     throw new Error('No email available for decryption');
   }
 
-  const payload: EncryptedPayload = JSON.parse(raw);
   if (!payload.ciphertext || !payload.iv) {
     log.warn('Local vault payload has no ciphertext/IV');
     return [];
@@ -263,7 +262,7 @@ async function loadVaultFromStorage(password: string): Promise<VaultItem[]> {
   const key = await deriveEncryptionKey(password, email);
   const plaintext = await decryptWithKey(payload, key);
   const items = JSON.parse(plaintext) as VaultItem[];
-  log.info('Loaded vault from localStorage', { itemCount: items.length });
+  log.info('Loaded vault from IndexedDB', { itemCount: items.length });
   return items;
 }
 
@@ -277,8 +276,8 @@ async function saveVaultToStorage(items: VaultItem[], password: string): Promise
   const key = await deriveEncryptionKey(password, email);
   const plaintext = JSON.stringify(items);
   const payload = await encryptWithKey(plaintext, key);
-  localStorage.setItem(VAULT_KEY, JSON.stringify(payload));
-  log.debug('Vault saved to localStorage', { itemCount: items.length });
+  await idbSet(VAULT_KEY, payload);
+  log.debug('Vault saved to IndexedDB', { itemCount: items.length });
 }
 
 // ── Cloud-synced save ────────────────────────────────────────────────
@@ -295,8 +294,8 @@ async function saveVaultEverywhere(items: VaultItem[], password: string): Promis
   const payload = await encryptWithKey(plaintext, key);
 
   // Save locally
-  localStorage.setItem(VAULT_KEY, JSON.stringify(payload));
-  log.debug('Vault saved to localStorage', { itemCount: items.length });
+  await idbSet(VAULT_KEY, payload);
+  log.debug('Vault saved to IndexedDB', { itemCount: items.length });
 
   // Save to cloud
   const uid = getUid();
@@ -336,7 +335,7 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
         items = JSON.parse(plaintext);
         loadedFromCloud = true;
         // Update local cache with cloud data
-        localStorage.setItem(VAULT_KEY, JSON.stringify(cloudData.encryptedPayload));
+        await idbSet(VAULT_KEY, cloudData.encryptedPayload);
         log.info('Vault loaded from cloud', { itemCount: items.length });
       } else {
         log.info('No vault data in cloud (new user)');
@@ -423,7 +422,7 @@ function startRealtimeSync(uid: string | null, password: string): void {
       const items: VaultItem[] = JSON.parse(plaintext);
       _cachedItems = items;
       // Update local cache
-      localStorage.setItem(VAULT_KEY, JSON.stringify(data.encryptedPayload));
+      await idbSet(VAULT_KEY, data.encryptedPayload);
       log.info('Sync callback: vault updated from remote', { itemCount: items.length });
       // Notify UI
       notifyVaultChangeListeners();
@@ -620,11 +619,11 @@ const defaultSettings: AppSettings = {
   allowScreenshots: true,
 };
 
-export function getSettings(): AppSettings {
-  const raw = localStorage.getItem(SETTINGS_KEY);
+export async function getSettings(): Promise<AppSettings> {
+  const raw = await idbGet<AppSettings>(SETTINGS_KEY);
   if (!raw) return { ...defaultSettings };
   try {
-    return { ...defaultSettings, ...JSON.parse(raw) };
+    return { ...defaultSettings, ...raw };
   } catch {
     return { ...defaultSettings };
   }
@@ -637,7 +636,7 @@ export async function loadSettingsWithCloud(): Promise<AppSettings> {
       log.debug('Loading settings from cloud', { uid });
       const cloudSettings = await loadSettingsFromCloud(uid);
       if (cloudSettings) {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(cloudSettings));
+        await idbSet(SETTINGS_KEY, cloudSettings);
         log.info('Settings loaded from cloud', { uid });
         return { ...defaultSettings, ...cloudSettings };
       }
@@ -648,9 +647,9 @@ export async function loadSettingsWithCloud(): Promise<AppSettings> {
   return getSettings();
 }
 
-export function saveSettings(settings: AppSettings): void {
+export async function saveSettings(settings: AppSettings): Promise<void> {
   log.info('Saving settings', { settings });
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  await idbSet(SETTINGS_KEY, settings);
 
   // Also save to cloud
   const uid = getUid();
@@ -726,7 +725,7 @@ export async function migrateLocalToCloud(): Promise<void> {
   log.info('Migrating local vault data to cloud', { uid, itemCount: items.length });
   await saveVaultEverywhere(items, _sessionPassword);
 
-  const settings = getSettings();
+  const settings = await getSettings();
   await saveSettingsToCloud(uid, settings).catch((e) => {
     log.error('Failed to migrate settings to cloud', e);
   });
@@ -751,6 +750,6 @@ export async function resetVault(): Promise<void> {
   }
 
   clearSession();
-  clearLocalVaultData();
+  await clearLocalVaultData();
   log.info('Vault reset complete');
 }

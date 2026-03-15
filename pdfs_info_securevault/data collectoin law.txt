@@ -1,0 +1,19 @@
+The "Privacy representatives" part (GDPR):
+This is ONLY if you:
+
+Process large amounts of user data
+
+Handle sensitive data (like passwords, health info, biometrics) - YOUR PASSWORD MANAGER DOES THIS
+
+Are a public authority
+
+What you might need:
+DPO (Data Protection Officer) - A person responsible for data protection in your company
+
+EU Representative - Someone in EU who handles GDPR questions (if you're outside EU but serve EU users)
+
+For your password manager:
+Since you're storing passwords (sensitive data), if you have EU users, you might need an EU representative if you get in trouble. But for a small project/startup, this usually isn't enforced until you're big.
+
+Bottom line: This is legal/formal stuff. If you're just building an app, uncheck the box if you don't want Google using your data for other products. The GDPR part matters when you launch and have real users.
+

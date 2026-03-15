@@ -1,15 +1,22 @@
 // ─── SecureVault Crypto Module ───────────────────────────────────────
-// Uses Web Crypto API exclusively:
-//   • PBKDF2 (SHA-256, 600 000 iterations) for key derivation
+// Uses:
+//   • Argon2id (via hash-wasm WASM) for key derivation
 //   • AES-GCM (256-bit) for vault encryption/decryption
+//   • Explicit Uint8Array scrubbing for sensitive key material
 // ─────────────────────────────────────────────────────────────────────
 
+import { argon2id } from 'hash-wasm';
+import { passwordToBytes, scrub, withScrubbing } from './secureMemory';
 import { createLogger } from './utils/logger';
 
 const log = createLogger('CRYPTO');
 
-const PBKDF2_ITERATIONS = 600_000;
-const KEY_LENGTH = 256; // bits
+// ── Argon2id parameters ──────────────────────────────────────────────
+const ARGON2_MEMORY = 65536;       // 64 MB
+const ARGON2_ITERATIONS = 3;
+const ARGON2_PARALLELISM = 1;
+const ARGON2_HASH_LENGTH = 32;     // 256-bit output
+
 const IV_BYTES = 12; // AES-GCM recommended IV size
 
 // ── Helpers: encode / decode ──────────────────────────────────────────
@@ -39,40 +46,63 @@ export function generateIV(): Uint8Array {
     return crypto.getRandomValues(new Uint8Array(IV_BYTES));
 }
 
-// ── Key derivation (Bitwarden Method) ────────────────────────────────
+// ── Core Argon2id derivation ─────────────────────────────────────────
 
-async function getKeyMaterial(password: string): Promise<CryptoKey> {
-    const encoder = new TextEncoder();
-    return crypto.subtle.importKey(
-        'raw',
-        encoder.encode(password),
-        'PBKDF2',
-        false,
-        ['deriveBits', 'deriveKey'],
-    );
+/**
+ * Derives raw 32-byte key material using Argon2id.
+ * The password Uint8Array is scrubbed automatically after hashing.
+ */
+async function deriveRawArgon2id(
+    passwordBytes: Uint8Array,
+    salt: string,
+): Promise<Uint8Array> {
+    const saltBytes = new TextEncoder().encode(salt);
+
+    log.debug('Starting Argon2id derivation', {
+        memory: ARGON2_MEMORY,
+        iterations: ARGON2_ITERATIONS,
+        parallelism: ARGON2_PARALLELISM,
+        saltLength: saltBytes.length,
+    });
+
+    const hashHex = await argon2id({
+        password: passwordBytes,
+        salt: saltBytes,
+        parallelism: ARGON2_PARALLELISM,
+        iterations: ARGON2_ITERATIONS,
+        memorySize: ARGON2_MEMORY,
+        hashLength: ARGON2_HASH_LENGTH,
+        outputType: 'hex',
+    });
+
+    // Convert hex string to Uint8Array
+    const hashBytes = new Uint8Array(ARGON2_HASH_LENGTH);
+    for (let i = 0; i < ARGON2_HASH_LENGTH; i++) {
+        hashBytes[i] = parseInt(hashHex.substring(i * 2, i * 2 + 2), 16);
+    }
+
+    log.debug('Argon2id derivation complete');
+    return hashBytes;
 }
+
+// ── Key derivation (Argon2id) ────────────────────────────────────────
 
 /**
  * Derives the Authentication Key used to log into Firebase.
  * Salt: email
  */
 export async function deriveAuthKey(masterPassword: string, email: string): Promise<string> {
-    log.debug('Deriving auth key', { email, iterations: PBKDF2_ITERATIONS });
-    const keyMaterial = await getKeyMaterial(masterPassword);
-    const saltBuffer = new TextEncoder().encode(email.toLowerCase().trim());
+    log.debug('Deriving auth key (Argon2id)', { email });
+    const pwdBytes = passwordToBytes(masterPassword);
+    const salt = email.toLowerCase().trim();
 
-    const derivedBits = await crypto.subtle.deriveBits(
-        {
-            name: 'PBKDF2',
-            salt: saltBuffer,
-            iterations: PBKDF2_ITERATIONS,
-            hash: 'SHA-256',
-        },
-        keyMaterial,
-        KEY_LENGTH,
-    );
-    log.debug('Auth key derived successfully');
-    return toBase64(derivedBits);
+    return withScrubbing(pwdBytes, async (buf) => {
+        const hashBytes = await deriveRawArgon2id(buf, salt);
+        const b64 = toBase64(hashBytes.buffer.slice(0) as ArrayBuffer);
+        scrub(hashBytes);
+        log.debug('Auth key derived successfully (Argon2id)');
+        return b64;
+    });
 }
 
 /**
@@ -80,24 +110,27 @@ export async function deriveAuthKey(masterPassword: string, email: string): Prom
  * Salt: email + "vault"
  */
 export async function deriveEncryptionKey(masterPassword: string, email: string): Promise<CryptoKey> {
-    log.debug('Deriving encryption key', { email, iterations: PBKDF2_ITERATIONS });
-    const keyMaterial = await getKeyMaterial(masterPassword);
-    const saltBuffer = new TextEncoder().encode(email.toLowerCase().trim() + 'vault');
+    log.debug('Deriving encryption key (Argon2id)', { email });
+    const pwdBytes = passwordToBytes(masterPassword);
+    const salt = email.toLowerCase().trim() + 'vault';
 
-    const key = await crypto.subtle.deriveKey(
-        {
-            name: 'PBKDF2',
-            salt: saltBuffer,
-            iterations: PBKDF2_ITERATIONS,
-            hash: 'SHA-256',
-        },
-        keyMaterial,
-        { name: 'AES-GCM', length: KEY_LENGTH },
-        false, // Do not make it extractable
-        ['encrypt', 'decrypt'],
-    );
-    log.debug('Encryption key derived successfully');
-    return key;
+    return withScrubbing(pwdBytes, async (buf) => {
+        const rawKey = await deriveRawArgon2id(buf, salt);
+
+        // Import the raw bytes as an AES-GCM CryptoKey
+        const key = await crypto.subtle.importKey(
+            'raw',
+            rawKey.buffer.slice(0) as ArrayBuffer,
+            { name: 'AES-GCM', length: 256 },
+            false, // not extractable
+            ['encrypt', 'decrypt'],
+        );
+
+        // Scrub the raw key material now that it's locked inside the CryptoKey
+        scrub(rawKey);
+        log.debug('Encryption key derived successfully (Argon2id)');
+        return key;
+    });
 }
 
 // ── Encryption ───────────────────────────────────────────────────────

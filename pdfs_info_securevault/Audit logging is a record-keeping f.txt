@@ -1,0 +1,85 @@
+**Audit logging** is a record-keeping feature that tracks who did what and when inside your database. Think of it as a security camera for your data—it logs every action (like reading, writing, deleting, or even failed login attempts) along with the user or IP address that performed it, and the exact time.
+
+### What gets logged?
+- **Data access:** Who queried a password vault, when, and from where.
+- **Schema changes:** If someone altered a table structure or added indexes.
+- **Authentication attempts:** Successful and failed logins to the database itself.
+- **Privilege changes:** If admin rights were granted or revoked.
+
+### Why is it important?
+- **Security investigations:** If a breach happens, audit logs help trace how it occurred and what data was accessed.
+- **Compliance:** Regulations like GDPR, HIPAA, or SOC2 often require audit trails to prove data handling practices.
+- **Troubleshooting:** Developers can see exactly what queries ran before an error occurred.
+
+### Relevance to your password manager
+For your app, **encryption happens at the application level**, so the database only stores encrypted blobs. Even if someone accessed the raw database, they’d only see ciphertext. However, audit logging would still be valuable for:
+- Monitoring who (or what service) connected to the database—e.g., spotting an unexpected IP trying to query user data.
+- Tracking administrative actions, like someone trying to drop tables or change security settings.
+
+### Why the free tier lacking it is fine—for now
+- **You are starting from zero:** At this stage, you likely don’t have compliance mandates or a large user base to monitor.
+- **Alternative methods:** You can implement your own lightweight logging inside your application (e.g., log when users log in, change passwords, or delete vaults). That won’t give you database-level visibility, but it covers the most critical user actions.
+- **Future upgrade:** If your app grows and you need formal audit trails, you can upgrade to a paid MongoDB Atlas tier or switch to a self-hosted solution where you can enable detailed logging yourself.
+
+**Bottom line:** Audit logging is a nice-to-have for security and compliance, but it’s not a dealbreaker for a free-tier password manager MVP. Focus on building your core encryption features first.
+
+Since you cannot invest money upfront, your options narrow to databases with a **generous and usable free tier**. Given your specific technical requirements (PBKDF2, AES-GCM), the good news is that the heavy cryptographic work happens in your application, not the database. This makes MongoDB a very viable and free option for you.
+
+Here is the breakdown of your best path forward.
+
+### ✅ The Recommendation: MongoDB Atlas (Free Tier)
+
+MongoDB Atlas is the official managed cloud service for MongoDB. It is perfect for your situation because it offers a permanent free tier that is robust enough to build and launch a real application .
+
+Here is why it fits your needs perfectly:
+
+*   **It's Truly Free**: The "M0" free tier cluster is free forever. You do not need to provide credit card details to get started . It includes 512 MB of storage, which is enough for thousands of password entries since you are primarily storing text .
+*   **Security is Handled**: Since you are concerned about encryption like AES and key derivation, you can focus 100% on your app's code. MongoDB Atlas handles infrastructure security: it provides encrypted connections (TLS/SSL) and allows you to set up IP access lists to prevent unauthorized access .
+*   **Reliability**: Even the free tier includes data replication across multiple servers, meaning if one server fails, your user data is still safe .
+
+### 🛡️ Addressing Your Concern: PBKDF2, AES, and Database Load
+
+You asked specifically about using algorithms like **PBKDF2** and **AES-GCM** and whether that would be too heavy for a NoSQL database.
+
+You do not need to worry about this. Here is the key distinction:
+
+1.  **The Database is Just Storage**: In a properly designed password manager, the database (MongoDB) **never performs the encryption or hashing**. It simply stores the final output .
+2.  **The App Does the Work**: The heavy computational work—like running PBKDF2 for thousands of iterations to derive a key, or encrypting data with AES—happens on the **client device** (or your backend server) **before** the data is ever sent to MongoDB .
+3.  **MongoDB's Role**: By the time the data hits the database, it is just a string of random-looking text (ciphertext). For example, you might store an object that looks like this, where the `vault` data is already encrypted:
+    ```json
+    {
+      "userId": "123",
+      "vault": "U2FsdGVkX19OiEdh/Lkjg4Z6V...==", // <-- Already encrypted by your app
+      "salt": "s78dfg67...", // <-- Random salt used for PBKDF2
+      "iterations": 600000
+    }
+    ```
+    MongoDB is exceptionally fast at storing and retrieving simple text blobs like this, so you won't experience a "heavy read/write" load.
+
+### 🚀 The Cost and Limits (MongoDB Atlas Free Tier)
+
+To give you a clear picture, here is exactly what you get for **$0** with MongoDB Atlas :
+
+| Feature | Free Tier (M0 Cluster) Details |
+| :--- | :--- |
+| **Storage** | **512 MB** (Shared RAM/CPU) |
+| **Data Replication** | Yes (3-node replica set for high availability) |
+| **Backups** | Automated, continuous backups (snapshots) |
+| **Database User Auth** | Username/Password |
+| **Network Security** | IP Access Lists |
+| **Encryption** | Encryption in Transit (TLS/SSL), Encryption at Rest (with cloud provider keys) |
+
+**Limitations to note:** The free tier has a storage limit of 512MB and disables some advanced enterprise features like detailed audit logging, but for a starting password manager, this is more than sufficient .
+
+### ⚙️ How to Start
+
+You can set this up in minutes. MongoDB provides a command-line tool to get you started instantly:
+
+```bash
+# This command logs you in and creates a free cluster automatically
+atlas setup --clusterName PasswordManager --tier M0 --username yourAppUser
+```
+
+This command will create your free database and give you the connection string to plug into your app .
+
+**Summary:** For a project with zero budget that needs to handle encryption, **MongoDB Atlas (Free Tier)** is your best bet. It removes the burden of server management while giving you the reliability and speed you need to test and launch your app.
