@@ -25,13 +25,7 @@ import {
     signInWithGoogle,
 } from '../auth';
 import { deriveAuthKey } from '../crypto';
-import {
-    hasConfiguredVault,
-    setupInitialVault,
-    setSessionPassword,
-    resetVault,
-    setPendingAutoUnlockPassword,
-} from '../store';
+import { hasConfiguredVault, setupInitialVault, setSessionPassword, resetVault, setPendingAutoUnlockPassword } from '../store';
 import { checkUsernameAvailable, claimUsername, checkEmailRegistered, registerEmail } from '../firestore';
 import { getCurrentUser } from '../auth';
 
@@ -105,9 +99,14 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     const user = await finishPasswordlessSignIn(window.location.href);
                     setEmail(user.email ?? '');
 
-                    // Check if they already have a vault (indicates they are resetting)
+                    // Parse mode from URL
+                    const url = new URL(window.location.href);
+                    const linkMode = url.searchParams.get('mode');
+                    
                     const hasVault = await hasConfiguredVault();
-                    setIsResetFlow(hasVault);
+                    // If the link explicitly says 'reset', honor it (or fallback to hasVault)
+                    const isReset = linkMode === 'reset' || hasVault;
+                    setIsResetFlow(isReset);
 
                     // Clean the URL bar so they don't refresh the magic link
                     window.history.replaceState(null, '', window.location.pathname);
@@ -135,12 +134,11 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             // First derive the auth key
             const authKey = await deriveAuthKey(password, email);
             await signInWithDerivedKey(email, authKey);
+            log.info('Login successful', { email });
 
-            // They successfully authenticated. The session password state is updated
-            // globally when `LockScreen` is bypassed or explicitly through `store.ts`.
-            // Session password state is updated globally when `LockScreen` 
-            // is unlocked correctly in the next application state loop.
-            log.info('Login successful');
+            // Ensure this email is registered in the hash registry (catch-all for old accounts)
+            try { await registerEmail(email); } catch (_e) { /* non-critical */ }
+
             setPendingAutoUnlockPassword(password);
             onAuthenticated();
         } catch (err: unknown) {
@@ -158,17 +156,17 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         setLoading(true);
 
         try {
+            // Check Firestore email hash registry (works even with Firebase enumeration protection)
             const isRegistered = await checkEmailRegistered(email);
+            log.info('Email existence check', { email, isRegistered, mode });
 
             if (mode === 'signup') {
-                // Block signup if email is already registered
                 if (isRegistered) {
                     setError('EMAIL_EXISTS');
                     setLoading(false);
                     return;
                 }
             } else if (mode === 'forgot') {
-                // Block forgot-password if email has never been registered
                 if (!isRegistered) {
                     setError('No account found with this email. Please create an account first.');
                     setLoading(false);
@@ -176,7 +174,9 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 }
             }
 
-            await sendPasswordlessVerificationLink(email);
+            // Map internal 'forgot' mode to the 'reset' value the magic link function expects
+            const linkMode = mode === 'forgot' ? 'reset' : 'signup';
+            await sendPasswordlessVerificationLink(email, linkMode);
             setMode('verify');
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -216,7 +216,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             if (hasVault) {
                 // Returning user — they already set up a vault before.
-                // Authenticate and let AppShell route to LockScreen.
+                // Ensure email hash is registered (catch-all for old accounts)
+                try { if (user.email) await registerEmail(user.email); } catch (_e) { /* non-critical */ }
                 onAuthenticated();
             } else {
                 // New user — needs to create a master password for encryption.
@@ -337,8 +338,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 }
             }
 
-            // Register this email as 'used' via hashed Firestore document
-            await registerEmail(email);
+            // Register email hash in Firestore so future signup attempts are blocked
+            if (!isResetFlow) {
+                await registerEmail(email);
+            }
 
             setSessionPassword(password);
             log.info('Master password setup complete, vault created');

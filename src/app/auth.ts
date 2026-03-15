@@ -24,13 +24,13 @@ const log = createLogger('AUTH');
 
 // ── Email Links (Flow 1 & 3) ─────────────────────────────────────────
 
-export async function sendPasswordlessVerificationLink(email: string): Promise<void> {
+export async function sendPasswordlessVerificationLink(email: string, mode: 'signup' | 'reset'): Promise<void> {
     if (!email) throw new Error("Email is required");
-    log.info('Sending passwordless verification link', { email });
+    log.info('Sending passwordless verification link', { email, mode });
 
     const actionCodeSettings = {
-        // Automatically redirects back to app, needs to match Firebase console config
-        url: window.location.origin,
+        // Automatically redirects back to app with the mode parameter
+        url: `${window.location.origin}/?mode=${mode}`,
         handleCodeInApp: true,
     };
     await sendSignInLinkToEmail(auth, email, actionCodeSettings);

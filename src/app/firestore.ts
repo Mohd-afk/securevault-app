@@ -47,20 +47,29 @@ export async function hashEmailForLookup(email: string): Promise<string> {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Check if an email has been registered by looking up its SHA-256 hash in Firestore.
+ * This is used during signup/forgot-password to verify email existence
+ * without exposing the actual email address.
+ */
 export async function checkEmailRegistered(email: string): Promise<boolean> {
     log.info('Checking if email is registered', { email });
-    const hash = await hashEmailForLookup(email);
+    const hash = await hashEmailForLookup(email.trim().toLowerCase());
     const snap = await getDoc(registeredEmailDocRef(hash));
     const exists = snap.exists();
-    log.info('Email registration check result', { email, isRegistered: exists });
+    log.info('Email registration check result', { isRegistered: exists });
     return exists;
 }
 
+/**
+ * Register an email as 'used' in Firestore after successful vault setup.
+ * Stores only the SHA-256 hash — the plaintext email is never saved.
+ */
 export async function registerEmail(email: string): Promise<void> {
-    log.info('Registering email hash', { email });
-    const hash = await hashEmailForLookup(email);
-    await setDoc(registeredEmailDocRef(hash), { registeredAt: serverTimestamp() });
-    log.info('Email hash registered successfully', { email });
+    log.info('Registering email hash in Firestore');
+    const hash = await hashEmailForLookup(email.trim().toLowerCase());
+    await setDoc(registeredEmailDocRef(hash), { registeredAt: serverTimestamp() }, { merge: true });
+    log.info('Email hash registered successfully');
 }
 
 // ── Vault operations ─────────────────────────────────────────────────
