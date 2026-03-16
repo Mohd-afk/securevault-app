@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2 } from 'lucide-react';
-import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault } from '../store';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin } from 'lucide-react';
+import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
+import { subscribeToDevices, revokeDevice, revokeAllOtherDevices, type DeviceSession, getLocalDeviceId } from '../services/deviceSession';
 import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
 import { toast } from 'sonner';
 import type { User } from 'firebase/auth';
@@ -37,6 +38,81 @@ export function Settings() {
         getSettings().then(setSettings);
     }, []);
 
+    // ── Biometric Unlock State ───────────────────────────────────────
+    const [biometricAvailable, setBiometricAvailable] = useState(false);
+    const [biometricReason, setBiometricReason] = useState<string | undefined>();
+    const [showBiometricSetup, setShowBiometricSetup] = useState(false);
+    const [biometricSetupPassword, setBiometricSetupPassword] = useState('');
+    const [enablingBiometric, setEnablingBiometric] = useState(false);
+
+    useEffect(() => {
+        checkBiometricAvailability().then(res => {
+            setBiometricAvailable(res.available);
+            setBiometricReason(res.reason);
+        });
+    }, []);
+
+    const handleToggleBiometric = async () => {
+        if (settings.biometricEnabled) {
+            await disableBiometricUnlock();
+            updateSetting('biometricEnabled', false);
+            toast.success('Biometric unlock disabled');
+        } else {
+            setShowBiometricSetup(true);
+        }
+    };
+
+    const handleEnableBiometric = async () => {
+        if (!biometricSetupPassword) return;
+        setEnablingBiometric(true);
+        try {
+            await enableBiometricUnlock(biometricSetupPassword);
+            updateSetting('biometricEnabled', true);
+            setShowBiometricSetup(false);
+            setBiometricSetupPassword('');
+            toast.success('Biometric unlock enabled!');
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to enable biometric unlock');
+        }
+        setEnablingBiometric(false);
+    };
+
+    // ── Device Sessions ──────────────────────────────────────────────
+    const [devices, setDevices] = useState<DeviceSession[]>([]);
+    const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
+    const [revokingAll, setRevokingAll] = useState(false);
+    const currentDeviceId = getLocalDeviceId();
+
+    useEffect(() => {
+        if (!user?.uid) return;
+        const unsub = subscribeToDevices(user.uid, setDevices);
+        return () => unsub();
+    }, [user?.uid]);
+
+    const handleRevokeDevice = async (deviceId: string) => {
+        if (!user?.uid) return;
+        setRevokingDeviceId(deviceId);
+        try {
+            await revokeDevice(user.uid, deviceId);
+            toast.success('Device logged out successfully');
+        } catch (error) {
+            toast.error('Failed to log out device');
+        }
+        setRevokingDeviceId(null);
+    };
+
+    const handleRevokeAllOther = async () => {
+        if (!user?.uid) return;
+        setRevokingAll(true);
+        try {
+            await revokeAllOtherDevices(user.uid);
+            toast.success('All other devices logged out');
+        } catch (error) {
+            toast.error('Failed to log out other devices');
+        }
+        setRevokingAll(false);
+    };
+
     // Password change form
     const [showPasswordForm, setShowPasswordForm] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
@@ -64,6 +140,37 @@ export function Settings() {
         count: number;
         items: Array<{ title: string; username: string; password: string; url: string }>;
     } | null>(null);
+
+    // Autofill Blocklist
+    const [showBlocklist, setShowBlocklist] = useState(false);
+    const [blocklistInput, setBlocklistInput] = useState('');
+
+    const handleAddBlockedSite = () => {
+        let site = blocklistInput.trim().toLowerCase();
+        if (!site) return;
+        
+        // Basic normalization
+        site = site.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+        if (!site.includes('.')) {
+            toast.error('Please enter a valid domain (e.g. bank.com)');
+            return;
+        }
+
+        const currentBlocklist = settings.autofillBlocklist || [];
+        if (currentBlocklist.includes(site)) {
+            toast.error('Site is already in the blocklist');
+            return;
+        }
+
+        updateSetting('autofillBlocklist', [...currentBlocklist, site]);
+        setBlocklistInput('');
+        toast.success(`Added \${site} to blocklist`);
+    };
+
+    const handleRemoveBlockedSite = (siteToRemove: string) => {
+        const currentBlocklist = settings.autofillBlocklist || [];
+        updateSetting('autofillBlocklist', currentBlocklist.filter(s => s !== siteToRemove));
+    };
 
     // Username state
     const [currentUsername, setCurrentUsername] = useState<string | null>(null);
@@ -189,7 +296,7 @@ export function Settings() {
     const handleForgotPassword = async () => {
         if (!user?.email) return;
         try {
-            await sendPasswordlessVerificationLink(user.email);
+            await sendPasswordlessVerificationLink(user.email, 'reset');
             toast.success('Password reset link sent to your email.');
             await handleSignOut();
         } catch {
@@ -498,6 +605,79 @@ export function Settings() {
                 <div>
                     <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Security</span>
                     <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                        
+                        {/* Biometric Unlock */}
+                        {biometricAvailable && (
+                            <div className="border-b border-white/5 pb-4">
+                                <div className="flex items-center justify-between pointer-events-none">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                                            <ShieldAlert className="w-4 h-4 text-emerald-400" />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-white text-sm">Biometric Unlock</span>
+                                            {settings.biometricEnabled && settings.lastBiometricUnlock && (
+                                                <span className="text-gray-500 text-[10px]">
+                                                    Last unlocked: {new Date(settings.lastBiometricUnlock).toLocaleDateString()}
+                                                </span>
+                                            )}
+                                            {!biometricAvailable && biometricReason && (
+                                                <span className="text-red-400 text-[10px]">{biometricReason}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleToggleBiometric}
+                                        disabled={!biometricAvailable}
+                                        className={`w-11 h-6 rounded-full relative transition-colors duration-200 pointer-events-auto ${settings.biometricEnabled ? 'bg-cyan-500' : 'bg-gray-600'} ${!biometricAvailable && 'opacity-50 cursor-not-allowed'}`}
+                                    >
+                                        <div className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ${settings.biometricEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                {showBiometricSetup && !settings.biometricEnabled && (
+                                    <div className="mt-4 p-4 bg-black/20 rounded-xl space-y-4">
+                                        <p className="text-gray-400 text-xs text-center border-b border-white/5 pb-3">
+                                            For security, please verify your Master Password to link your biometrics. Your password is never stored.
+                                        </p>
+                                        <div className="relative">
+                                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
+                                            <input
+                                                type={showPasswords ? 'text' : 'password'}
+                                                value={biometricSetupPassword}
+                                                onChange={(e) => setBiometricSetupPassword(e.target.value)}
+                                                placeholder="Master Password"
+                                                className="w-full bg-[#1a1a2e] border border-gray-700/50 rounded-xl py-3 pl-10 pr-11 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPasswords(!showPasswords)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                                            >
+                                                {showPasswords ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                                            </button>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => { setShowBiometricSetup(false); setBiometricSetupPassword(''); }}
+                                                className="flex-1 py-2.5 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors text-sm"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleEnableBiometric}
+                                                disabled={enablingBiometric || !biometricSetupPassword}
+                                                className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white py-2.5 rounded-xl disabled:opacity-50 transition-all text-sm flex items-center justify-center gap-2"
+                                            >
+                                                {enablingBiometric && <Loader2 className="w-4 h-4 animate-spin" />}
+                                                Enable
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Change Master Password */}
                         <div>
                             <button
@@ -600,6 +780,69 @@ export function Settings() {
                     </div>
                 </div>
 
+                {/* Active Devices Section */}
+                <div>
+                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Active Devices</span>
+                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                        <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-1 lg:gap-3">
+                            {devices.sort((a, b) => (b.lastActive?.toMillis?.() || 0) - (a.lastActive?.toMillis?.() || 0)).map((device) => {
+                                const isCurrent = device.id === currentDeviceId;
+                                const isMobile = /android|ios|iphone|ipad/i.test(device.os || '');
+                                const DeviceIcon = isMobile ? Smartphone : (device.os ? Laptop : Monitor);
+                                // Format time ago roughly
+                                const lastActiveDate = device.lastActive?.toDate?.() || new Date();
+                                const diffMins = Math.floor((Date.now() - lastActiveDate.getTime()) / 60000);
+                                const timeStr = diffMins < 1 ? 'Just now' : diffMins < 60 ? `${diffMins}m ago` : diffMins < 1440 ? `${Math.floor(diffMins/60)}h ago` : `${Math.floor(diffMins/1440)}d ago`;
+
+                                return (
+                                    <div key={device.id} className="flex gap-3 justify-between items-center py-2 border-b border-white/5 last:border-0 lg:border-0 lg:bg-white/5 lg:p-3 lg:rounded-xl">
+                                        <div className="flex gap-3 items-center min-w-0">
+                                            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
+                                                <DeviceIcon className="w-5 h-5 text-blue-400" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-white text-sm truncate font-medium">{device.browser || 'Unknown Browser'}</p>
+                                                    {isCurrent && (
+                                                        <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-semibold">This Device</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-gray-400 text-xs truncate flex items-center gap-1">
+                                                    {device.os || 'Unknown OS'}
+                                                    {device.city && ` • ${device.city}, ${device.country}`}
+                                                </p>
+                                                <p className="text-gray-500 text-[11px] mt-0.5 flex items-center gap-1">
+                                                    <Clock className="w-3 h-3" /> {timeStr}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {!isCurrent && (
+                                            <button
+                                                onClick={() => handleRevokeDevice(device.id)}
+                                                disabled={revokingDeviceId === device.id}
+                                                className="shrink-0 p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                                                title="Log out device"
+                                            >
+                                                {revokingDeviceId === device.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {devices.length > 1 && (
+                            <button
+                                onClick={handleRevokeAllOther}
+                                disabled={revokingAll}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors text-sm mt-2"
+                            >
+                                {revokingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <MonitorOff className="w-4 h-4" />}
+                                {revokingAll ? 'Logging out...' : 'Log out all other devices'}
+                            </button>
+                        )}
+                    </div>
+                </div>
+
                 {/* Auto-Lock Section */}
                 <div>
                     <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Auto-Lock</span>
@@ -673,11 +916,117 @@ export function Settings() {
                     </div>
                 </div>
 
+                {/* Autofill Section */}
+                <div>
+                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Autofill</span>
+                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-white text-sm flex items-center gap-2">
+                                    <Globe className="w-4 h-4 text-cyan-400" />
+                                    Android Autofill Service
+                                </p>
+                                <p className="text-gray-500 text-[11px] mt-1.5 leading-relaxed max-w-[240px]">
+                                    Use SecureVault to automatically fill passwords in your other apps and websites.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    toast.info('Action Required', { 
+                                        description: 'Please go to Android Settings > Passwords & Accounts > Autofill service, and select SecureVault.',
+                                        duration: 6000 
+                                    });
+                                }}
+                                className="px-3.5 py-2 bg-white/5 border border-white/10 text-white text-xs font-medium rounded-lg hover:bg-white/10 transition-colors"
+                            >
+                                Configure
+                            </button>
+                        </div>
+                        
+                        {/* Blocklist Toggle */}
+                        <div className="pt-4 border-t border-white/5">
+                            <button
+                                onClick={() => setShowBlocklist(!showBlocklist)}
+                                className="w-full flex items-center justify-between group"
+                            >
+                                <div className="text-left">
+                                    <span className="text-white text-sm block">Autofill Blocklist</span>
+                                    <span className="text-gray-500 text-xs">Sites where Autofill should be hidden</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs bg-white/5 text-gray-400 px-2 py-0.5 rounded-full">
+                                        {(settings.autofillBlocklist || []).length}
+                                    </span>
+                                    <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showBlocklist ? 'rotate-180' : ''}`} />
+                                </div>
+                            </button>
+
+                            {showBlocklist && (
+                                <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={blocklistInput}
+                                            onChange={(e) => setBlocklistInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleAddBlockedSite()}
+                                            placeholder="e.g. chase.com"
+                                            className="flex-1 bg-[#1a1a2e] border border-gray-700/50 rounded-xl py-2 pl-3 pr-3 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-cyan-500/50 transition-colors"
+                                        />
+                                        <button
+                                            onClick={handleAddBlockedSite}
+                                            className="px-4 bg-white/5 border border-white/10 text-white text-sm font-medium rounded-xl hover:bg-white/10 transition-colors"
+                                        >
+                                            Add
+                                        </button>
+                                    </div>
+
+                                    {(settings.autofillBlocklist || []).length > 0 ? (
+                                        <div className="space-y-2 mt-3 bg-[#1a1a2e] rounded-xl p-2 border border-white/5 max-h-48 overflow-y-auto">
+                                            {(settings.autofillBlocklist || []).map((site) => (
+                                                <div key={site} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 group transition-colors">
+                                                    <span className="text-gray-300 text-sm">{site}</span>
+                                                    <button
+                                                        onClick={() => handleRemoveBlockedSite(site)}
+                                                        className="p-1 rounded-md text-gray-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-500 text-xs text-center py-4 bg-[#1a1a2e] rounded-xl border border-white/5">
+                                            No sites in blocklist
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
                 {/* Data Section — CSV Import */}
                 <div>
                     <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Data</span>
                     <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                        {/* Trash Bin */}
                         <div>
+                            <button
+                                onClick={() => navigate('/trash')}
+                                className="w-full flex items-center gap-3"
+                            >
+                                <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                                    <Trash2 className="w-4 h-4 text-orange-400" />
+                                </div>
+                                <div className="text-left">
+                                    <span className="text-white text-sm block">Trash Bin</span>
+                                    <span className="text-gray-500 text-xs">View or restore deleted passwords</span>
+                                </div>
+                            </button>
+                        </div>
+
+                        {/* Import Passwords */}
+                        <div className="pt-4 border-t border-white/5">
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={importing}
@@ -869,13 +1218,44 @@ export function Settings() {
                         </div>
                         <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">Key Derivation</span>
-                            <span className="text-gray-300 text-xs">PBKDF2 (600K iterations)</span>
+                            <span className="text-gray-300 text-xs">Argon2id</span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">Cloud Sync</span>
                             <span className="text-green-400 text-xs">● Active</span>
                         </div>
                     </div>
+                </div>
+
+                {/* Legal Section */}
+                <div>
+                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Legal</span>
+                    <div className="bg-[#16213e] rounded-xl overflow-hidden divide-y divide-white/5">
+                        {[
+                            { label: 'Terms & Conditions', path: '/terms' },
+                            { label: 'Privacy Policy', path: '/privacy' },
+                            { label: 'License Agreement', path: '/license' },
+                        ].map(({ label, path }) => (
+                            <a
+                                key={path}
+                                href={path}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-between px-4 py-3.5 hover:bg-white/5 transition-colors group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-7 h-7 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                                        <Scale className="w-3.5 h-3.5 text-cyan-400" />
+                                    </div>
+                                    <span className="text-white text-sm group-hover:text-cyan-400 transition-colors">{label}</span>
+                                </div>
+                                <ExternalLink className="w-3.5 h-3.5 text-gray-600 group-hover:text-cyan-400 transition-colors" />
+                            </a>
+                        ))}
+                    </div>
+                    <p className="text-gray-600 text-[10px] text-center mt-3">
+                        © {new Date().getFullYear()} SecureVault · An independent software project
+                    </p>
                 </div>
             </div>
         </div>

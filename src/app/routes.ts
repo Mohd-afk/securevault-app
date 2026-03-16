@@ -4,8 +4,16 @@ import { HomeWrapper } from './components/HomeWrapper';
 import { AddEditForm } from './components/AddEditForm';
 import { ItemDetail } from './components/ItemDetail';
 import { Settings } from './components/Settings';
+import { TrashBin } from './components/TrashBin';
+import { TermsPage } from './components/legal/TermsPage';
+import { PrivacyPage } from './components/legal/PrivacyPage';
+import { LicensePage } from './components/legal/LicensePage';
 
 export const router = createBrowserRouter([
+  // Public legal pages — accessible without login
+  { path: 'terms',   Component: TermsPage },
+  { path: 'privacy', Component: PrivacyPage },
+  { path: 'license', Component: LicensePage },
   {
     path: '/',
     Component: AppShell,
@@ -15,6 +23,7 @@ export const router = createBrowserRouter([
       { path: 'item/:id', Component: ItemDetail },
       { path: 'edit/:id', Component: AddEditForm },
       { path: 'settings', Component: Settings },
+      { path: 'trash', Component: TrashBin },
     ],
   },
 ]);

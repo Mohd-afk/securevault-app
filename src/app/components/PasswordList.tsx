@@ -11,7 +11,6 @@ const typeIcons: Record<string, React.ReactNode> = {
   'Door Lock': <DoorOpen className="w-5 h-5 text-amber-400" />,
   Card: <CreditCard className="w-5 h-5 text-pink-400" />,
   Other: <KeyRound className="w-5 h-5 text-gray-400" />,
-  Trash: <Trash2 className="w-5 h-5 text-red-400" />,
 };
 
 const typeColors: Record<string, string> = {
@@ -21,7 +20,6 @@ const typeColors: Record<string, string> = {
   'Door Lock': 'bg-amber-500/10',
   Card: 'bg-pink-500/10',
   Other: 'bg-gray-500/10',
-  Trash: 'bg-red-500/10',
 };
 
 interface PasswordListProps {
@@ -51,9 +49,11 @@ export function PasswordList({ onLock, user }: PasswordListProps) {
   }, []);
 
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
+    // Exclude deleted items from the main list.
+    const activeItems = items.filter(i => !i.deletedAt);
+    if (!searchQuery.trim()) return activeItems;
     const q = searchQuery.toLowerCase();
-    return items.filter(
+    return activeItems.filter(
       i => i.title.toLowerCase().includes(q) ||
         i.username.toLowerCase().includes(q) ||
         i.url.toLowerCase().includes(q) ||
@@ -61,23 +61,19 @@ export function PasswordList({ onLock, user }: PasswordListProps) {
     );
   }, [items, searchQuery]);
 
-  // Group by type (or Trash)
+  // Group by type
   const grouped = useMemo(() => {
     const map = new Map<string, VaultItem[]>();
     filteredItems.forEach(item => {
-      const type = item.deletedAt ? 'Trash' : item.type;
+      const type = item.type;
       const existing = map.get(type) || [];
       existing.push(item);
       map.set(type, existing);
     });
-    // Sort so Trash is at the end
+    // Sort
     const sortedMap = new Map<string, VaultItem[]>();
     Array.from(map.keys())
-      .sort((a, b) => {
-        if (a === 'Trash') return 1;
-        if (b === 'Trash') return -1;
-        return a.localeCompare(b);
-      })
+      .sort((a, b) => a.localeCompare(b))
       .forEach(key => sortedMap.set(key, map.get(key)!));
 
     return sortedMap;
@@ -198,8 +194,8 @@ export function PasswordList({ onLock, user }: PasswordListProps) {
                           onClick={() => navigate(`/item/${item.id}`)}
                           className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 active:bg-white/10 transition-colors text-left"
                         >
-                          <div className={`w-10 h-10 rounded-xl ${typeColors[item.deletedAt ? 'Trash' : item.type]} flex items-center justify-center shrink-0`}>
-                            {typeIcons[item.deletedAt ? 'Trash' : item.type]}
+                          <div className={`w-10 h-10 rounded-xl ${typeColors[item.type]} flex items-center justify-center shrink-0`}>
+                            {typeIcons[item.type]}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-sm truncate">{item.title}</p>

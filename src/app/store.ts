@@ -3,6 +3,8 @@ import {
   deriveAuthKey,
   encryptWithKey,
   decryptWithKey,
+  exportDEK,
+  importDEK,
   type EncryptedPayload,
 } from './crypto';
 import { getCurrentUser, finalizeMasterPasswordSetup, reauthenticateUser } from './auth';
@@ -16,6 +18,26 @@ import {
 } from './firestore';
 import { idbGet, idbSet, idbDelete } from './idb';
 import { createLogger } from './utils/logger';
+import { registerPlugin, Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
+
+export interface VaultBridgePlugin {
+  fullSync(options: { items: any[] }): Promise<void>;
+  getItems(): Promise<{ items: any[] }>;
+}
+
+export interface BiometricBridgePlugin {
+  isBiometricAvailable(): Promise<{ available: boolean, reason?: string }>;
+  enableBiometric(options: { dekBase64: string }): Promise<{ success: boolean }>;
+  unlockWithBiometric(): Promise<{ dekBase64: string }>;
+  disableBiometric(): Promise<{ success: boolean }>;
+  isBiometricEnabled(): Promise<{ enabled: boolean }>;
+  syncAutoLockTimeout(options: { timeoutMinutes: number }): Promise<{ success: boolean }>;
+  syncAutofillBlocklist(options: { blocklist: string[] }): Promise<{ success: boolean }>;
+}
+
+const VaultBridge = registerPlugin<VaultBridgePlugin>('VaultBridge');
+const BiometricBridge = registerPlugin<BiometricBridgePlugin>('BiometricBridge');
 
 const log = createLogger('STORE');
 
@@ -40,6 +62,9 @@ export interface AppSettings {
   autoLockTimeout: number; // minutes, 0 means never
   lockOnHide: boolean; // lock when app goes to background
   allowScreenshots: boolean; // allow screenshots (native wrapper required for enforcement)
+  biometricEnabled?: boolean;
+  lastBiometricUnlock?: string;
+  autofillBlocklist?: string[];
 }
 
 // ── Storage keys ─────────────────────────────────────────────────────
@@ -50,6 +75,7 @@ const SETTINGS_KEY = 'securevault_settings';
 // ── In-memory session state ──────────────────────────────────────────
 
 let _sessionPassword: string | null = null;
+let _sessionCryptoKey: CryptoKey | null = null;
 let _pendingAutoUnlockPassword: string | null = null;
 let _cachedItems: VaultItem[] | null = null;
 let _unsubscribeVault: (() => void) | null = null;
@@ -67,6 +93,7 @@ export function setSessionPassword(password: string): void {
 export function clearSession(): void {
   log.info('Clearing session (password, cache, listeners)');
   _sessionPassword = null;
+  _sessionCryptoKey = null;
   _pendingAutoUnlockPassword = null;
   _cachedItems = null;
   if (_unsubscribeVault) {
@@ -280,6 +307,10 @@ async function saveVaultToStorage(items: VaultItem[], password: string): Promise
   log.debug('Vault saved to IndexedDB', { itemCount: items.length });
 }
 
+// ── Native Vault Bridge Sync ─────────────────────────────────────────
+
+// Intentionally empty block, the new implementation is at the bottom of the file
+
 // ── Cloud-synced save ────────────────────────────────────────────────
 
 async function saveVaultEverywhere(items: VaultItem[], password: string): Promise<void> {
@@ -289,16 +320,21 @@ async function saveVaultEverywhere(items: VaultItem[], password: string): Promis
     return;
   }
 
-  const key = await deriveEncryptionKey(password, email);
+  const key = _sessionCryptoKey || await deriveEncryptionKey(password, email);
   const plaintext = JSON.stringify(items);
   const payload = await encryptWithKey(plaintext, key);
+  const uid = getUid(); // Get UID here for logging
 
-  // Save locally
+  log.info('Saving vault payload everywhere', { uid, itemCount: items.length });
+
+  // 1. Save locally
   await idbSet(VAULT_KEY, payload);
-  log.debug('Vault saved to IndexedDB', { itemCount: items.length });
+  log.debug('Vault saved to IndexedDB');
 
-  // Save to cloud
-  const uid = getUid();
+  // 2. Push transparently to native Android DB for Autofill
+  await syncToNativeVault(items);
+
+  // 3. Save to cloud
   if (uid) {
     // Mark write timestamp to suppress echo-back from realtime sync
     _lastWriteTimestamp = Date.now();
@@ -383,7 +419,13 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
     log.error('Error during auto-purge of trash items', e);
   });
 
-  return items;
+  // Reverse sync: Fetch newly saved items from native Autofill
+  await checkAndMergeAutofillItems();
+
+  // Forward sync: Push latest web items to native DB for Autofill
+  await syncToNativeVault(_cachedItems || items);
+
+  return _cachedItems || items;
 }
 
 function startRealtimeSync(uid: string | null, password: string): void {
@@ -403,27 +445,31 @@ function startRealtimeSync(uid: string | null, password: string): void {
   log.info('Starting realtime vault sync listener', { uid });
 
   _unsubscribeVault = subscribeToVault(uid, async (data) => {
-    if (!data || !_sessionPassword) {
-      log.debug('Sync callback: no data or no session password, ignoring');
+    if (!data || (!_sessionPassword && !_sessionCryptoKey)) {
+      log.debug('Sync callback: no data or no session password/key, ignoring');
       return;
     }
 
-    // If we wrote recently, skip this echo-back
-    const timeSinceWrite = Date.now() - _lastWriteTimestamp;
-    if (timeSinceWrite < SYNC_SUPPRESS_WINDOW_MS) {
-      log.debug('Sync callback: suppressing echo-back from our own write', { timeSinceWrite });
+    // Check if this is an echo of our own write
+    if (Date.now() - _lastWriteTimestamp < SYNC_SUPPRESS_WINDOW_MS) {
+      log.debug('Sync callback: ignoring recent local write');
       return;
     }
 
     try {
       log.info('Sync callback: received remote vault update, decrypting');
-      const key = await deriveEncryptionKey(password, email);
+      const email = getUserEmail();
+      const key = _sessionCryptoKey || await deriveEncryptionKey(password, email);
       const plaintext = await decryptWithKey(data.encryptedPayload, key);
       const items: VaultItem[] = JSON.parse(plaintext);
       _cachedItems = items;
       // Update local cache
       await idbSet(VAULT_KEY, data.encryptedPayload);
       log.info('Sync callback: vault updated from remote', { itemCount: items.length });
+      
+      // Update Native DB
+      await syncToNativeVault(items);
+      
       // Notify UI
       notifyVaultChangeListeners();
     } catch (e) {
@@ -617,16 +663,24 @@ const defaultSettings: AppSettings = {
   autoLockTimeout: 5,
   lockOnHide: true,
   allowScreenshots: true,
+  biometricEnabled: false,
+  autofillBlocklist: [],
 };
 
 export async function getSettings(): Promise<AppSettings> {
   const raw = await idbGet<AppSettings>(SETTINGS_KEY);
-  if (!raw) return { ...defaultSettings };
+  const result = { ...defaultSettings, ...(raw || {}) };
   try {
-    return { ...defaultSettings, ...raw };
-  } catch {
-    return { ...defaultSettings };
+    if (Capacitor.getPlatform() === 'android') {
+      await BiometricBridge.syncAutoLockTimeout({ timeoutMinutes: result.autoLockTimeout });
+      if (result.autofillBlocklist) {
+          await BiometricBridge.syncAutofillBlocklist({ blocklist: result.autofillBlocklist });
+      }
+    }
+  } catch (e) {
+    log.warn('Could not sync local timeout setting', e);
   }
+  return result;
 }
 
 export async function loadSettingsWithCloud(): Promise<AppSettings> {
@@ -650,6 +704,18 @@ export async function loadSettingsWithCloud(): Promise<AppSettings> {
 export async function saveSettings(settings: AppSettings): Promise<void> {
   log.info('Saving settings', { settings });
   await idbSet(SETTINGS_KEY, settings);
+
+  // Sync to native vault
+  try {
+     if (Capacitor.getPlatform() === 'android') {
+        await BiometricBridge.syncAutoLockTimeout({ timeoutMinutes: settings.autoLockTimeout });
+        if (settings.autofillBlocklist) {
+            await BiometricBridge.syncAutofillBlocklist({ blocklist: settings.autofillBlocklist });
+        }
+     }
+  } catch (e) {
+     log.warn('Failed to sync settings to native', e);
+  }
 
   // Also save to cloud
   const uid = getUid();
@@ -699,6 +765,21 @@ export async function changeMasterPassword(
 
     // 4. Update session password only after everything succeeded
     _sessionPassword = newPassword;
+
+    // 5. Re-wrap DEK if biometric is enabled
+    try {
+      const settings = await getSettings();
+      if (settings.biometricEnabled && Capacitor.getPlatform() === 'android') {
+        const dekBase64 = await exportDEK(newPassword, email);
+        await BiometricBridge.enableBiometric({ dekBase64 });
+        log.info('DEK successfully re-wrapped with new master password');
+      }
+    } catch (bioError) {
+      log.error('Failed to re-wrap DEK after password change', bioError);
+      const settings = await getSettings();
+      await saveSettings({ ...settings, biometricEnabled: false });
+    }
+
     log.info('Master password change completed successfully');
     return true;
   } catch (e) {
@@ -752,4 +833,150 @@ export async function resetVault(): Promise<void> {
   clearSession();
   await clearLocalVaultData();
   log.info('Vault reset complete');
+}
+
+// ── Native Autofill Sync ─────────────────────────────────────────────
+
+async function syncToNativeVault(items: VaultItem[]): Promise<void> {
+  if (Capacitor.getPlatform() !== 'android') return;
+  
+  try {
+    const validItems = items.map(i => ({
+      id: i.id,
+      title: i.title || '',
+      username: i.username || '',
+      password: i.password || '',
+      uris: JSON.stringify(i.url ? [i.url] : []),
+      type: i.type || 'Other',
+      note: i.note || '',
+      createdAt: new Date(i.createdAt).getTime(),
+      updatedAt: new Date(i.updatedAt).getTime(),
+      deletedAt: i.deletedAt ? new Date(i.deletedAt).getTime() : null
+    }));
+
+    await VaultBridge.fullSync({ items: validItems });
+    log.debug('Native SQLite vault sync completed', { count: validItems.length });
+  } catch (e) {
+    log.error('Failed to sync to Native Vault', e);
+  }
+}
+
+async function checkAndMergeAutofillItems(): Promise<void> {
+  if (!_sessionPassword) return;
+  try {
+    const nativeData = await VaultBridge.getItems();
+    const nativeItems = nativeData?.items || [];
+    
+    const items = getVaultItems();
+    const newItems = nativeItems.filter((nItem: any) => !items.find(i => i.id === nItem.id));
+    
+    if (newItems.length > 0) {
+      log.info(`Background reverse sync: Found ${newItems.length} new items from Autofill`);
+      
+      const formattedItems = newItems.map((nItem: any) => ({
+        id: nItem.id,
+        title: nItem.title || 'Unknown',
+        username: nItem.username || '',
+        password: nItem.password || '',
+        url: nItem.url || '',
+        type: (nItem.type as ItemType) || 'Website',
+        note: nItem.note || '',
+        createdAt: nItem.createdAt || new Date().toISOString(),
+        updatedAt: nItem.updatedAt || new Date().toISOString(),
+      }));
+      
+      const mergedItems = [...items, ...formattedItems];
+      _cachedItems = mergedItems;
+      await saveVaultEverywhere(mergedItems, _sessionPassword);
+    }
+  } catch (e) {
+    log.debug('Background reverse sync check failed', e);
+  }
+}
+
+// Ensure the App listener is only added once
+try {
+  App.addListener('appStateChange', async ({ isActive }) => {
+    if (isActive && _sessionPassword) {
+      await checkAndMergeAutofillItems();
+    }
+  });
+} catch (e) {
+  log.warn('Could not register app state listener (maybe web env)', e);
+}
+
+// ── Biometric Unlock Ops ─────────────────────────────────────────────
+
+export async function enableBiometricUnlock(password: string): Promise<boolean> {
+  const email = getUserEmail();
+  if (!email) throw new Error('No email available');
+  
+  if (Capacitor.getPlatform() !== 'android') {
+    throw new Error('Biometrics only available on Android');
+  }
+
+  // Verify password first
+  const isVerified = await verifyMasterPassword(password);
+  if (!isVerified) throw new Error('Incorrect Master Password');
+
+  const dekBase64 = await exportDEK(password, email);
+  await BiometricBridge.enableBiometric({ dekBase64 });
+
+  const settings = await getSettings();
+  await saveSettings({ ...settings, biometricEnabled: true });
+  log.info('Biometric unlock enabled');
+  return true;
+}
+
+export async function checkBiometricAvailability(): Promise<{ available: boolean, reason?: string }> {
+  if (Capacitor.getPlatform() !== 'android') return { available: false, reason: 'Platform not supported' };
+  return BiometricBridge.isBiometricAvailable();
+}
+
+export async function unlockWithBiometric(): Promise<boolean> {
+  try {
+    const email = getUserEmail();
+    if (!email) throw new Error('No email available');
+
+    const { dekBase64 } = await BiometricBridge.unlockWithBiometric();
+    const key = await importDEK(dekBase64);
+    _sessionCryptoKey = key; // Preserve in memory for bg sync/saves
+    
+    const payload = await idbGet<EncryptedPayload>(VAULT_KEY);
+    if (!payload?.ciphertext || !payload?.iv) {
+      throw new Error('No local vault data found');
+    }
+
+    const plaintext = await decryptWithKey(payload, key);
+    const items = JSON.parse(plaintext) as VaultItem[];
+    
+    _cachedItems = items;
+    
+    const settings = await getSettings();
+    await saveSettings({
+        ...settings,
+        lastBiometricUnlock: new Date().toISOString()
+    });
+    
+    log.info('Vault unlocked via biometrics', { itemCount: items.length });
+    
+    const uid = getUid();
+    if (uid) {
+      startRealtimeSync(uid, '');
+    }
+    
+    return true;
+  } catch (e) {
+    log.error('Biometric unlock failed', e);
+    throw e;
+  }
+}
+
+export async function disableBiometricUnlock(): Promise<void> {
+  if (Capacitor.getPlatform() === 'android') {
+    await BiometricBridge.disableBiometric();
+  }
+  const settings = await getSettings();
+  await saveSettings({ ...settings, biometricEnabled: false });
+  log.info('Biometric unlock disabled');
 }

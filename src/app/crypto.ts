@@ -133,6 +133,45 @@ export async function deriveEncryptionKey(masterPassword: string, email: string)
     });
 }
 
+/**
+ * Drives the Argon2id key derivation and extracts the RAW DEK bytes as Base64.
+ * Used ONLY once during Biometric Enable to pass to the native KeyStore wrapper.
+ */
+export async function exportDEK(masterPassword: string, email: string): Promise<string> {
+    log.debug('Exporting raw DEK for biometric wrap', { email });
+    const pwdBytes = passwordToBytes(masterPassword);
+    const salt = email.toLowerCase().trim() + 'vault';
+
+    return withScrubbing(pwdBytes, async (buf) => {
+        const rawKey = await deriveRawArgon2id(buf, salt);
+        const b64 = toBase64(rawKey.buffer.slice(0) as ArrayBuffer);
+        
+        scrub(rawKey);
+        log.debug('DEK exported successfully');
+        return b64;
+    });
+}
+
+/**
+ * Imports a Base64 RAW DEK (unwrapped from Biometrics) back into an ephemeral CryptoKey.
+ */
+export async function importDEK(dekBase64: string): Promise<CryptoKey> {
+    log.debug('Importing unwrapped DEK into CryptoKey');
+    const rawKey = new Uint8Array(fromBase64(dekBase64));
+
+    const key = await crypto.subtle.importKey(
+        'raw',
+        rawKey.buffer.slice(0) as ArrayBuffer,
+        { name: 'AES-GCM', length: 256 },
+        false, // not extractable
+        ['encrypt', 'decrypt'],
+    );
+    
+    scrub(rawKey);
+    log.debug('DEK imported successfully');
+    return key;
+}
+
 // ── Encryption ───────────────────────────────────────────────────────
 
 export interface EncryptedPayload {

@@ -7,6 +7,7 @@ import { onAuthChange, signOut, isVerificationLink } from '../auth';
 import { auth } from '../firebase';
 import type { User } from 'firebase/auth';
 import { createLogger } from '../utils/logger';
+import { registerCurrentDevice, listenForRevocation, updateLastActive } from '../services/deviceSession';
 
 const log = createLogger('UI');
 
@@ -155,6 +156,47 @@ export function AppShell() {
       cleanupRef.current?.();
     };
   }, [unlocked, handleLock]);
+
+  // ── Device Session tracking ────────────────────────────────────────
+  useEffect(() => {
+    if (!unlocked || !user) return;
+
+    let cleanupListener: (() => void) | undefined;
+    let cancelled = false;
+
+    // Register device and sync location
+    registerCurrentDevice(user.uid).then(() => {
+      if (cancelled) return;
+      // Start listening for revocation after registration
+      cleanupListener = listenForRevocation(user.uid, () => {
+        log.warn('AppShell: Session revoked remotely. Signing out.');
+        handleSignOut();
+      });
+    }).catch(e => log.error('AppShell: Failed to register device', e));
+
+    // Update lastActive on user interactions, throttled internally to 10 min
+    const handleInteraction = () => {
+      updateLastActive(user.uid).catch(e => log.error('AppShell: Failed heartbeat', e));
+    };
+
+    const interactionEvents = ['mousedown', 'keydown', 'touchstart'];
+    interactionEvents.forEach(e => document.addEventListener(e, handleInteraction, { passive: true }));
+    
+    // Also run an interval just in case they are reading passively
+    const tenMins = 10 * 60 * 1000;
+    const heartbeatInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        handleInteraction();
+      }
+    }, tenMins);
+
+    return () => {
+      cancelled = true;
+      if (cleanupListener) cleanupListener();
+      clearInterval(heartbeatInterval);
+      interactionEvents.forEach(e => document.removeEventListener(e, handleInteraction));
+    };
+  }, [unlocked, user, handleSignOut]);
 
   // ── Loading state ────────────────────────────────────────────────
   if (authLoading) {

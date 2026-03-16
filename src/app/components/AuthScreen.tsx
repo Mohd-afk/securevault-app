@@ -25,13 +25,14 @@ import {
     signInWithGoogle,
 } from '../auth';
 import { deriveAuthKey } from '../crypto';
-import { hasConfiguredVault, setupInitialVault, setSessionPassword, resetVault, setPendingAutoUnlockPassword } from '../store';
+import { hasConfiguredVault, setupInitialVault, setSessionPassword, resetVault, setPendingAutoUnlockPassword, unlockWithBiometric, getSettings, checkBiometricAvailability } from '../store';
 import { checkUsernameAvailable, claimUsername, checkEmailRegistered, registerEmail } from '../firestore';
 import { getCurrentUser } from '../auth';
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'verify' | 'setup_master' | 'processing_link';
 
 import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
+import { getRateLimitState, recordFailedAttempt, clearRateLimit, forceHardLockout } from '../utils/rateLimit';
 
 const log = createLogger('UI');
 
@@ -52,6 +53,45 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const [googleLoading, setGoogleLoading] = useState(false);
     const [isResetFlow, setIsResetFlow] = useState(false);
     const [hasAcknowledged, setHasAcknowledged] = useState(false);
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [lockoutSecs, setLockoutSecs] = useState<number>(0);
+
+    const [biometricEnabled, setBiometricEnabled] = useState(false);
+
+    useEffect(() => {
+        const checkBiometric = async () => {
+            try {
+                const settings = await getSettings();
+                if (settings.biometricEnabled) {
+                    const res = await checkBiometricAvailability();
+                    if (res.available) {
+                        setBiometricEnabled(true);
+                    }
+                }
+            } catch (e) {
+                log.warn('Failed to check biometric config', e);
+            }
+        };
+        checkBiometric();
+    }, []);
+
+    const handleBiometricUnlock = async () => {
+        try {
+            setError('');
+            setLoading(true);
+            const success = await unlockWithBiometric();
+            if (success) {
+                onAuthenticated();
+            }
+        } catch (e: any) {
+            log.warn('Biometric unlock failed or dismissed', e);
+            if (!String(e).includes('ERROR_10') && !String(e).includes('ERROR_13')) { 
+                setError('Biometric authentication failed. Please enter your Master Password.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // ── Username state ─────────────────────────────────────────────────
     const [username, setUsername] = useState('');
@@ -88,6 +128,33 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             }
         }, 400);
     }, []);
+
+    // ── Rate Limit UI Timer ───────────────────────────────────────────
+    useEffect(() => {
+        let timer: ReturnType<typeof setInterval>;
+        if (lockoutSecs > 0) {
+            timer = setInterval(() => {
+                setLockoutSecs((prev) => Math.max(0, prev - 1));
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [lockoutSecs]);
+
+    useEffect(() => {
+        if (!email) {
+            setLockoutSecs(0);
+            return;
+        }
+        const state = getRateLimitState(email);
+        if (state.lockedUntil) {
+            const remaining = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+            if (remaining > 0) {
+                setLockoutSecs(remaining);
+            }
+        } else {
+            setLockoutSecs(0);
+        }
+    }, [email, mode]);
 
     // ── On Mount: Check Magic Link ────────────────────────────────────
     useEffect(() => {
@@ -127,6 +194,15 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+
+        const state = getRateLimitState(email);
+        if (state.lockedUntil && state.lockedUntil > Date.now()) {
+            const remaining = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+            setLockoutSecs(remaining);
+            setError(`Too many failed attempts. Try again in ${remaining}s.`);
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -136,6 +212,8 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             await signInWithDerivedKey(email, authKey);
             log.info('Login successful', { email });
 
+            clearRateLimit(email);
+
             // Ensure this email is registered in the hash registry (catch-all for old accounts)
             try { await registerEmail(email); } catch (_e) { /* non-critical */ }
 
@@ -143,8 +221,23 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             onAuthenticated();
         } catch (err: unknown) {
             log.error('Login failed', err);
-            // Generic message for security (don't reveal if user or pass is wrong)
-            setError('Incorrect email or Master Password.');
+            const message = err instanceof Error ? err.message : String(err);
+            
+            if (message.includes('auth/too-many-requests')) {
+                const newState = forceHardLockout(email);
+                const remaining = Math.ceil(((newState.lockedUntil || 0) - Date.now()) / 1000);
+                setLockoutSecs(remaining);
+                setError(`Too many requests. Account temporarily locked for ${Math.ceil(remaining/60)} minutes.`);
+            } else {
+                const newState = recordFailedAttempt(email);
+                if (newState.lockedUntil && newState.lockedUntil > Date.now()) {
+                    const remaining = Math.ceil((newState.lockedUntil - Date.now()) / 1000);
+                    setLockoutSecs(remaining);
+                    setError(`Too many failed attempts. Try again in ${remaining}s.`);
+                } else {
+                    setError('Incorrect email or Master Password.');
+                }
+            }
         }
         setLoading(false);
     };
@@ -153,6 +246,12 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const handleRequestLink = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+
+        if (mode === 'signup' && !agreedToTerms) {
+            setError('Please agree to the Terms & Conditions and Privacy Policy to continue.');
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -663,18 +762,34 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                         </div>
                     )}
 
-                    <button
-                        type="submit"
-                        disabled={loading || !email || (isLogin && !password)}
-                        className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 mt-2"
-                    >
-                        {loading ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                            <ArrowRight className="w-4 h-4" />
+                    <div className="flex flex-col gap-3 mt-4">
+                        {isLogin && biometricEnabled && lockoutSecs === 0 && (
+                            <button
+                                type="button"
+                                onClick={handleBiometricUnlock}
+                                disabled={loading || !email}
+                                className="w-full bg-[#16213e] hover:bg-[#1a2942] border border-emerald-500/30 text-emerald-400 py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                            >
+                                <Shield className="w-4 h-4" />
+                                Unlock with Biometrics
+                            </button>
                         )}
-                        {loading ? 'Please wait...' : isLogin ? 'Open Vault' : isSignup ? 'Create Account' : 'Send Reset Link'}
-                    </button>
+                        
+                        <button
+                            type="submit"
+                            disabled={loading || !email || (isLogin && !password) || lockoutSecs > 0 || (isSignup && !agreedToTerms)}
+                            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2"
+                        >
+                            {loading ? (
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : lockoutSecs > 0 ? (
+                                <Lock className="w-4 h-4" />
+                            ) : (
+                                <ArrowRight className="w-4 h-4" />
+                            )}
+                            {loading ? 'Please wait...' : lockoutSecs > 0 ? `Try again in ${Math.ceil(lockoutSecs / 60) >= 1 && lockoutSecs >= 60 ? Math.ceil(lockoutSecs / 60) + 'm' : lockoutSecs + 's'}` : isLogin ? 'Open Vault' : isSignup ? 'Create Account' : 'Send Reset Link'}
+                        </button>
+                    </div>
                 </form>
 
                 {/* Google Sign-In Divider + Button */}
@@ -711,13 +826,35 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     )}
                 </div>
 
+                {/* Terms consent — signup only */}
+                {isSignup && (
+                    <label className="flex items-start gap-3 mt-4 cursor-pointer group">
+                        <div className="relative flex items-center justify-center mt-0.5 shrink-0">
+                            <input
+                                type="checkbox"
+                                checked={agreedToTerms}
+                                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                className="peer appearance-none w-5 h-5 border-2 border-gray-600 rounded-md bg-[#16213e] checked:bg-cyan-500 checked:border-cyan-500 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                            />
+                            <Check className="absolute w-3.5 h-3.5 text-[#1a1a2e] opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
+                        </div>
+                        <span className="text-gray-400 text-xs leading-snug group-hover:text-gray-300 transition-colors flex-1">
+                            I agree to the{' '}
+                            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Terms &amp; Conditions</a>
+                            {' '}and{' '}
+                            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Privacy Policy</a>
+                        </span>
+                    </label>
+                )}
+
                 {/* Toggle mode */}
-                <div className="mt-8">
+                <div className="mt-6">
                     <button
                         onClick={() => {
                             setMode(isLogin ? 'signup' : 'signin');
                             setError('');
                             setPassword('');
+                            setAgreedToTerms(false);
                         }}
                         className="text-gray-400 text-sm hover:text-cyan-400 transition-colors"
                     >
