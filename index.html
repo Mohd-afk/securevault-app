@@ -8,7 +8,7 @@
         default-src 'self';
         script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' https://apis.google.com https://*.googleapis.com https://www.gstatic.com https://*.firebaseapp.com https://*.fillout.com https://zite.com https://*.zite.so;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-        font-src 'self' https://fonts.gstatic.com;
+        font-src 'self' https://fonts.gstatic.com data:;
         img-src 'self' data: blob: https://*.googleusercontent.com https://images.fillout.com https://*.zite.so;
         connect-src 'self'
           https://*.googleapis.com
@@ -29,6 +29,7 @@
         base-uri 'self';
       " />
       <title>SecureVault — Zero-Knowledge Password Manager</title>
+      <link rel="icon" href="data:," />
     </head>
 
     <body>

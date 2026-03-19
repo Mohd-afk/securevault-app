@@ -579,3 +579,19 @@ interface VaultItem {
 - Don't use `border-white` or thick borders. Keep borders at `border-white/5` or `border-gray-700/50`.
 - Don't override the base typography in `theme.css` unless specifically requested.
 - Don't use emoji or decorative elements in the UI.
+
+---
+
+## 14. Terminal & Git Interface Guidelines (For AI Agents)
+
+> [!IMPORTANT]
+> **PowerShell Compatibility:** This project runs on Windows (PowerShell). Standard Unix command chaining (`&&`) is NOT supported in default PowerShell 5.1 and will cause a ParserError.
+
+### 14.1 Command Chaining
+- **DO NOT USE `&&`** for chaining commands in terminal calls.
+- **USE `;`** (semicolon) to run commands sequentially in PowerShell.
+- **Example Git Command:** `git add . ; git commit -m "..." ; git push`
+
+### 14.2 Environment Awareness
+- Always verify the current working directory (`Cwd`) before running shell commands.
+- Only create project-specific rule files (like `.cursorrules`) if explicitly requested, as the team primarily uses Gemini and Claude agents.
