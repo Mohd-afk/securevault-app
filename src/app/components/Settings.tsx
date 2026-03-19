@@ -41,35 +41,39 @@ function FeedbackModal({ onClose, user }: { onClose: () => void, user: User }) {
     }, []);
 
     return (
-        <div className="fixed inset-0 z-50 bg-[#0a0a14]/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-[#16213e] rounded-2xl border border-white/10 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
+        <div className="fixed inset-0 z-[100] bg-[#0a0a14]/90 backdrop-blur-sm flex items-center justify-center sm:p-6">
+            <div className="bg-[#16213e] w-full h-[100dvh] sm:h-[90vh] sm:max-h-[1000px] sm:max-w-5xl sm:rounded-2xl border-0 sm:border border-white/10 flex flex-col overflow-hidden shadow-2xl relative transition-all">
                 {/* Modal Header */}
-                <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#1a1a2e] relative z-10">
+                <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/5 bg-[#1a1a2e] relative z-20 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                            <MessageSquare className="w-4 h-4 text-purple-400" />
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                            <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
                         </div>
-                        <h3 className="text-white font-medium">Send Feedback</h3>
+                        <div>
+                            <h3 className="text-white font-medium text-base sm:text-lg">Send Feedback</h3>
+                            <p className="text-gray-400 text-xs hidden sm:block mt-0.5">Let us know how we can improve SecureVault</p>
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors focus:outline-none"
+                        className="p-2 sm:p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors focus:outline-none"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="w-5 h-5 sm:w-6 sm:h-6" />
                     </button>
                 </div>
 
                 {/* Modal Content - Zite Embed */}
-                <div className="flex-1 w-full bg-[#1a1a2e] relative overflow-hidden flex items-center justify-center min-h-[600px]">
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="flex-1 w-full bg-[#1a1a2e] relative overflow-hidden flex flex-col">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
                         <div className="flex flex-col items-center gap-3">
-                            <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
-                            <p className="text-gray-400 text-sm">Loading Feedback Form...</p>
+                            <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-purple-500/50 animate-spin" />
+                            <p className="text-gray-400/80 text-sm font-medium">Loading Feedback Form...</p>
                         </div>
                     </div>
-                    {/* Zite embed container */}
+                    {/* Zite embed container - ensure it aggressively takes full remaining height */}
                     <div
-                        style={{ width: '100%', height: '100%', position: 'relative', zIndex: 10 }}
+                        className="w-full flex-1 relative z-10"
+                        style={{ height: '100%', minHeight: '100%' }}
                         data-zite-id="6z1qzc5a64"
                         data-zite-embed-type="standard"
                         data-zite-inherit-parameters
