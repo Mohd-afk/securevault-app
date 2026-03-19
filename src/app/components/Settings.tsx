@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare } from 'lucide-react';
+import { FilloutPopupEmbed } from '@fillout/react';
+import '@fillout/react/style.css';
 import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
@@ -129,6 +131,9 @@ export function Settings() {
     const [showDeletePassword, setShowDeletePassword] = useState(false);
     const [deleteDataError, setDeleteDataError] = useState('');
     const [deletingData, setDeletingData] = useState(false);
+
+    // Feedback popup
+    const [showFeedback, setShowFeedback] = useState(false);
 
     // Timeout dropdown
     const [showTimeoutDropdown, setShowTimeoutDropdown] = useState(false);
@@ -1183,10 +1188,11 @@ export function Settings() {
                     </div>
                 </div>
 
-                {/* Referrals Section */}
+                {/* Support & Feedback Section */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Spread the Word</span>
-                    <div className="bg-[#16213e] rounded-xl p-4">
+                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Support &amp; Feedback</span>
+                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                        {/* Share App */}
                         <button
                             onClick={handleShareApp}
                             className="w-full flex items-center justify-between group"
@@ -1201,8 +1207,42 @@ export function Settings() {
                                 </div>
                             </div>
                         </button>
+
+                        {/* Send Feedback */}
+                        <div className="pt-4 border-t border-white/5">
+                            <button
+                                onClick={() => setShowFeedback(true)}
+                                className="w-full flex items-center justify-between group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                        <MessageSquare className="w-5 h-5 text-purple-400" />
+                                    </div>
+                                    <div className="text-left">
+                                        <span className="text-white text-sm block font-medium group-hover:text-purple-400 transition-colors">Send Feedback</span>
+                                        <span className="text-gray-400 text-xs">Report bugs or suggest features</span>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
                     </div>
                 </div>
+
+                {/* Fillout Feedback Popup */}
+                {showFeedback && (
+                    <FilloutPopupEmbed
+                        filloutId="6z1qzc5a64"
+                        isOpen={showFeedback}
+                        onClose={() => setShowFeedback(false)}
+                        parameters={{
+                            userId: user.uid,
+                            email: user.email ?? '',
+                            appVersion: '2.0.0',
+                            deviceInfo: navigator.userAgent,
+                            timestamp: new Date().toISOString(),
+                        }}
+                    />
+                )}
 
                 {/* App Info */}
                 <div>

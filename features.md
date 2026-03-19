@@ -246,6 +246,23 @@ Displayed in Settings under a "Legal" section. A consent checkbox was added to t
 
 ---
 
+### 1.18 In-App Feedback Form
+
+**Description:** Users can submit feedback without leaving the app via a Fillout-powered popup form. The form is accessible from the **Support & Feedback** section in Settings (formerly "Spread the Word"). Contextual data is automatically injected as Fillout hidden fields — no manual input required from the user.
+
+Auto-attached context:
+- `userId` — Firebase UID
+- `email` — User's email
+- `appVersion` — Current app version (`2.0.0`)
+- `deviceInfo` — Browser user-agent string
+- `timestamp` — ISO-8601 timestamp at time of opening
+
+- **Introduced:** conversation `aec1582a` (2026-03-19)
+- **Key Files:** `Settings.tsx`, `package.json` (`@fillout/react` dependency)
+- **Implementation Note:** Context is forwarded to Fillout via `parameters` prop (hidden fields). No data is stored in Firebase; Fillout's dashboard stores all submissions.
+
+---
+
 ## 2. Developer / System Features
 
 ### 2.1 Structured Logging System
