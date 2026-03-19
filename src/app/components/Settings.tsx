@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare } from 'lucide-react';
-import { FilloutPopupEmbed } from '@fillout/react';
 import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
@@ -23,6 +22,64 @@ interface OutletContext {
     onLock: () => void;
     onSignOut: () => void;
     user: User;
+}
+
+function FeedbackModal({ onClose, user }: { onClose: () => void, user: User }) {
+    useEffect(() => {
+        // Dynamically load the Zite script when the modal is opened
+        const script = document.createElement('script');
+        script.src = "https://server.fillout.com/embed/v2-zite/";
+        script.async = true;
+        document.body.appendChild(script);
+
+        return () => {
+             // Cleanup if needed, though usually safe to leave
+             if (document.body.contains(script)) {
+                 document.body.removeChild(script);
+             }
+        };
+    }, []);
+
+    return (
+        <div className="fixed inset-0 z-50 bg-[#0a0a14]/90 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-[#16213e] rounded-2xl border border-white/10 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#1a1a2e] relative z-10">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                            <MessageSquare className="w-4 h-4 text-purple-400" />
+                        </div>
+                        <h3 className="text-white font-medium">Send Feedback</h3>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors focus:outline-none"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Modal Content - Zite Embed */}
+                <div className="flex-1 w-full bg-[#1a1a2e] relative overflow-hidden flex items-center justify-center min-h-[600px]">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="flex flex-col items-center gap-3">
+                            <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+                            <p className="text-gray-400 text-sm">Loading Feedback Form...</p>
+                        </div>
+                    </div>
+                    {/* Zite embed container */}
+                    <div
+                        style={{ width: '100%', height: '100%', position: 'relative', zIndex: 10 }}
+                        data-zite-id="6z1qzc5a64"
+                        data-zite-embed-type="standard"
+                        data-zite-inherit-parameters
+                        data-userid={user?.uid || ''}
+                        data-email={user?.email || ''}
+                    ></div>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export function Settings() {
@@ -1227,19 +1284,11 @@ export function Settings() {
                     </div>
                 </div>
 
-                {/* Fillout Feedback Popup */}
+                {/* Zite Feedback Modal */}
                 {showFeedback && (
-                    <FilloutPopupEmbed
-                        filloutId="6z1qzc5a64"
-                        isOpen={showFeedback}
-                        onClose={() => setShowFeedback(false)}
-                        parameters={{
-                            userId: user.uid,
-                            email: user.email ?? '',
-                            appVersion: '2.0.0',
-                            deviceInfo: navigator.userAgent,
-                            timestamp: new Date().toISOString(),
-                        }}
+                    <FeedbackModal 
+                        onClose={() => setShowFeedback(false)} 
+                        user={user} 
                     />
                 )}
 

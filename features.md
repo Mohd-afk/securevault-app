@@ -248,18 +248,15 @@ Displayed in Settings under a "Legal" section. A consent checkbox was added to t
 
 ### 1.18 In-App Feedback Form
 
-**Description:** Users can submit feedback without leaving the app via a Fillout-powered popup form. The form is accessible from the **Support & Feedback** section in Settings (formerly "Spread the Word"). Contextual data is automatically injected as Fillout hidden fields — no manual input required from the user.
+**Description:** Users can submit feedback without leaving the app via a Zite-powered standard embed form (Fillout). The form is accessible from the **Support & Feedback** section in Settings (formerly "Spread the Word"). Contextual data is automatically injected using Zite's `data-zite-*` attributes — no manual input required from the user.
 
 Auto-attached context:
 - `userId` — Firebase UID
 - `email` — User's email
-- `appVersion` — Current app version (`2.0.0`)
-- `deviceInfo` — Browser user-agent string
-- `timestamp` — ISO-8601 timestamp at time of opening
 
 - **Introduced:** conversation `aec1582a` (2026-03-19)
-- **Key Files:** `Settings.tsx`, `package.json` (`@fillout/react` dependency)
-- **Implementation Note:** Context is forwarded to Fillout via `parameters` prop (hidden fields). No data is stored in Firebase; Fillout's dashboard stores all submissions.
+- **Key Files:** `Settings.tsx`
+- **Implementation Note:** The Zite embed script (`v2-zite`) is injected dynamically into the DOM via a React `useEffect` when the modal is opened to safely bypass React's strict script handling. Long or unencoded data strings (like user-agent) were excluded to prevent `500 Internal Server Errors` triggered by the upstream Fillout API. No data is stored in Firebase; Fillout's dashboard stores all submissions.
 
 ---
 
