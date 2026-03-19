@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "release": "vite build && node scripts/release-ota.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/core": "^8.2.0",
+    "@capgo/capacitor-updater": "^8.43.11",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
     "@fillout/react": "^3.0.0",
