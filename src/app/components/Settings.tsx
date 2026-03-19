@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare } from 'lucide-react';
 import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
@@ -94,6 +94,25 @@ export function Settings() {
         lockOnHide: true,
         allowScreenshots: true,
     });
+
+    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+        account: true,
+        security: true,
+        devices: true,
+        autolock: true,
+        autofill: true,
+        data: true,
+        support: true,
+        about: true,
+        legal: true
+    });
+
+    const toggleCategory = (category: string) => {
+        setExpandedCategories(prev => ({
+            ...prev,
+            [category]: !prev[category]
+        }));
+    };
 
     // Load settings asynchronously from IndexedDB on mount
     useEffect(() => {
@@ -562,114 +581,137 @@ export function Settings() {
             <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
                 {/* Account Section */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Account</span>
-                    <div className="bg-[#16213e] rounded-xl p-4 space-y-3">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center">
-                                <span className="text-cyan-400 text-sm font-medium">
-                                    {(user.displayName?.[0] || user.email?.[0] || 'U').toUpperCase()}
-                                </span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                {user.displayName && (
-                                    <p className="text-white text-sm truncate">{user.displayName}</p>
-                                )}
-                                <p className="text-gray-400 text-xs truncate">{user.email}</p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={handleSignOut}
-                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors text-sm"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            Sign Out
-                        </button>
-
-                        {/* Username Section */}
-                        <div className="pt-3 border-t border-white/5">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                                        <AtSign className="w-4 h-4 text-purple-400" />
-                                    </div>
-                                    <div>
-                                        <span className="text-white text-sm block">Username</span>
-                                        {currentUsername ? (
-                                            <span className="text-gray-400 text-xs">@{currentUsername}</span>
-                                        ) : (
-                                            <span className="text-gray-500 text-xs italic">Not set</span>
-                                        )}
-                                    </div>
+                    <button
+                        onClick={() => toggleCategory('account')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Account</span>
+                        {expandedCategories.account ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.account && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center">
+                                    <span className="text-cyan-400 text-sm font-medium">
+                                        {(user.displayName?.[0] || user.email?.[0] || 'U').toUpperCase()}
+                                    </span>
                                 </div>
-                                {(!currentUsername) && (
-                                    <button
-                                        onClick={() => {
-                                            setEditingUsername(!editingUsername);
-                                            setNewUsername(currentUsername || '');
-                                            setUsernameStatus('idle');
-                                        }}
-                                        className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-gray-200 transition-colors"
-                                    >
-                                        <Pencil className="w-3.5 h-3.5" />
-                                    </button>
-                                )}
+                                <div className="flex-1 min-w-0">
+                                    {user.displayName && (
+                                        <p className="text-white text-sm truncate">{user.displayName}</p>
+                                    )}
+                                    <p className="text-gray-400 text-xs truncate">{user.email}</p>
+                                </div>
                             </div>
+                            <button
+                                onClick={handleSignOut}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors text-sm"
+                            >
+                                <LogOut className="w-4 h-4" />
+                                Sign Out
+                            </button>
 
-                            {editingUsername && (
-                                <div className="mt-3 space-y-2">
-                                    <div className="relative">
-                                        <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                                        <input
-                                            type="text"
-                                            value={newUsername}
-                                            onChange={(e) => handleNewUsernameChange(e.target.value)}
-                                            placeholder="new_username"
-                                            className={`w-full bg-[#1a1a2e] border rounded-xl py-2.5 pl-9 pr-10 text-white text-sm placeholder-gray-500 focus:outline-none transition-colors ${usernameStatus === 'available' ? 'border-emerald-500'
-                                                : usernameStatus === 'taken' || usernameStatus === 'invalid' ? 'border-red-500'
-                                                    : 'border-gray-700 focus:border-cyan-500'
-                                                }`}
-                                            maxLength={20}
-                                            autoComplete="off"
-                                        />
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                            {usernameStatus === 'checking' && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
-                                            {usernameStatus === 'available' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                                            {(usernameStatus === 'taken' || usernameStatus === 'invalid') && <X className="w-3.5 h-3.5 text-red-400" />}
+                            {/* Username Section */}
+                            <div className="pt-3 border-t border-white/5">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                            <AtSign className="w-4 h-4 text-purple-400" />
+                                        </div>
+                                        <div>
+                                            <span className="text-white text-sm block">Username</span>
+                                            {currentUsername ? (
+                                                <span className="text-gray-400 text-xs">@{currentUsername}</span>
+                                            ) : (
+                                                <span className="text-gray-500 text-xs italic">Not set</span>
+                                            )}
                                         </div>
                                     </div>
-
-                                    <div className="text-[11px]">
-                                        {usernameStatus === 'available' && <p className="text-emerald-400">✓ Available</p>}
-                                        {usernameStatus === 'taken' && <p className="text-red-400">✗ Already taken</p>}
-                                        {usernameStatus === 'invalid' && <p className="text-red-400">3-20 chars, lowercase, numbers, underscores only</p>}
-                                    </div>
-
-                                    <div className="flex gap-2">
+                                    {(!currentUsername) && (
                                         <button
-                                            onClick={() => { setEditingUsername(false); setNewUsername(''); setUsernameStatus('idle'); }}
-                                            className="flex-1 py-2 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors text-xs"
+                                            onClick={() => {
+                                                setEditingUsername(!editingUsername);
+                                                setNewUsername(currentUsername || '');
+                                                setUsernameStatus('idle');
+                                            }}
+                                            className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-gray-200 transition-colors"
                                         >
-                                            Cancel
+                                            <Pencil className="w-3.5 h-3.5" />
                                         </button>
-                                        <button
-                                            onClick={handleSaveUsername}
-                                            disabled={savingUsername || usernameStatus !== 'available'}
-                                            className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 rounded-xl disabled:opacity-50 transition-all text-xs flex items-center justify-center gap-1"
-                                        >
-                                            {savingUsername ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                                            {savingUsername ? 'Saving...' : 'Save'}
-                                        </button>
-                                    </div>
+                                    )}
                                 </div>
-                            )}
+
+                                {editingUsername && (
+                                    <div className="mt-3 space-y-2">
+                                        <div className="relative">
+                                            <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                                            <input
+                                                type="text"
+                                                value={newUsername}
+                                                onChange={(e) => handleNewUsernameChange(e.target.value)}
+                                                placeholder="new_username"
+                                                className={`w-full bg-[#1a1a2e] border rounded-xl py-2.5 pl-9 pr-10 text-white text-sm placeholder-gray-500 focus:outline-none transition-colors ${usernameStatus === 'available' ? 'border-emerald-500'
+                                                    : usernameStatus === 'taken' || usernameStatus === 'invalid' ? 'border-red-500'
+                                                        : 'border-gray-700 focus:border-cyan-500'
+                                                    }`}
+                                                maxLength={20}
+                                                autoComplete="off"
+                                            />
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                {usernameStatus === 'checking' && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
+                                                {usernameStatus === 'available' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                                                {(usernameStatus === 'taken' || usernameStatus === 'invalid') && <X className="w-3.5 h-3.5 text-red-400" />}
+                                            </div>
+                                        </div>
+
+                                        <div className="text-[11px]">
+                                            {usernameStatus === 'available' && <p className="text-emerald-400">✓ Available</p>}
+                                            {usernameStatus === 'taken' && <p className="text-red-400">✗ Already taken</p>}
+                                            {usernameStatus === 'invalid' && <p className="text-red-400">3-20 chars, lowercase, numbers, underscores only</p>}
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => { setEditingUsername(false); setNewUsername(''); setUsernameStatus('idle'); }}
+                                                className="flex-1 py-2 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors text-xs"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleSaveUsername}
+                                                disabled={savingUsername || usernameStatus !== 'available'}
+                                                className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 rounded-xl disabled:opacity-50 transition-all text-xs flex items-center justify-center gap-1"
+                                            >
+                                                {savingUsername ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                                                {savingUsername ? 'Saving...' : 'Save'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Security Section */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Security</span>
-                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                    <button 
+                        onClick={() => toggleCategory('security')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Security</span>
+                        {expandedCategories.security ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.security && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
                         
                         {/* Biometric Unlock */}
                         {biometricAvailable && (
@@ -842,13 +884,25 @@ export function Settings() {
                                 </div>
                             )}
                         </div>
-                    </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Active Devices Section */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Active Devices</span>
-                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                    <button 
+                        onClick={() => toggleCategory('devices')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Active Devices</span>
+                        {expandedCategories.devices ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.devices && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
                         <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-1 lg:gap-3">
                             {devices.sort((a, b) => (b.lastActive?.toMillis?.() || 0) - (a.lastActive?.toMillis?.() || 0)).map((device) => {
                                 const isCurrent = device.id === currentDeviceId;
@@ -906,12 +960,24 @@ export function Settings() {
                             </button>
                         )}
                     </div>
+                    )}
                 </div>
 
                 {/* Auto-Lock Section */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Auto-Lock</span>
-                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                    <button 
+                        onClick={() => toggleCategory('autolock')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Auto-Lock</span>
+                        {expandedCategories.autolock ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.autolock && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
                         {/* Timeout Dropdown */}
                         <div>
                             <label className="text-gray-400 text-xs mb-1.5 block">Lock after inactivity</label>
@@ -979,12 +1045,24 @@ export function Settings() {
                             </button>
                         </div>
                     </div>
+                    )}
                 </div>
 
                 {/* Autofill Section */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Autofill</span>
-                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                    <button 
+                        onClick={() => toggleCategory('autofill')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Autofill</span>
+                        {expandedCategories.autofill ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.autofill && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-white text-sm flex items-center gap-2">
@@ -1068,12 +1146,24 @@ export function Settings() {
                             )}
                         </div>
                     </div>
+                    )}
                 </div>
 
                 {/* Data Section — CSV Import */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Data</span>
-                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                    <button 
+                        onClick={() => toggleCategory('data')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Data</span>
+                        {expandedCategories.data ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.data && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
                         {/* Trash Bin */}
                         <div>
                             <button
@@ -1246,12 +1336,24 @@ export function Settings() {
                             )}
                         </div>
                     </div>
+                    )}
                 </div>
 
                 {/* Support & Feedback Section */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Support &amp; Feedback</span>
-                    <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                    <button 
+                        onClick={() => toggleCategory('support')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Support &amp; Feedback</span>
+                        {expandedCategories.support ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.support && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
                         {/* Share App */}
                         <button
                             onClick={handleShareApp}
@@ -1286,6 +1388,7 @@ export function Settings() {
                             </button>
                         </div>
                     </div>
+                    )}
                 </div>
 
                 {/* Zite Feedback Modal */}
@@ -1298,8 +1401,19 @@ export function Settings() {
 
                 {/* App Info */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">About</span>
-                    <div className="bg-[#16213e] rounded-xl p-4 space-y-2">
+                    <button 
+                        onClick={() => toggleCategory('about')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">About</span>
+                        {expandedCategories.about ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.about && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-2">
                         <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">Version</span>
                             <span className="text-gray-300 text-xs">2.0.0</span>
@@ -1317,12 +1431,24 @@ export function Settings() {
                             <span className="text-green-400 text-xs">● Active</span>
                         </div>
                     </div>
+                    )}
                 </div>
 
                 {/* Legal Section */}
                 <div>
-                    <span className="text-gray-500 text-xs uppercase tracking-wider px-1 mb-2 block">Legal</span>
-                    <div className="bg-[#16213e] rounded-xl overflow-hidden divide-y divide-white/5">
+                    <button 
+                        onClick={() => toggleCategory('legal')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Legal</span>
+                        {expandedCategories.legal ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.legal && (
+                        <div className="bg-[#16213e] rounded-xl overflow-hidden divide-y divide-white/5">
                         {[
                             { label: 'Terms & Conditions', path: '/terms' },
                             { label: 'Privacy Policy', path: '/privacy' },
@@ -1345,7 +1471,8 @@ export function Settings() {
                             </a>
                         ))}
                     </div>
-                    <p className="text-gray-600 text-[10px] text-center mt-3">
+                    )}
+                    <p className="text-gray-600 text-[10px] text-center mt-3 mb-6">
                         © {new Date().getFullYear()} SecureVault · An independent software project
                     </p>
                 </div>

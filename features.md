@@ -260,6 +260,26 @@ Auto-attached context:
 
 ---
 
+### 1.19 Collapsible Settings Categories
+
+**Description:** All sections within the Settings page are now collapsible with smooth toggle functionality, mirroring the collapsible category design of the vault password list. Each section header is a clickable button featuring a `ChevronUp`/`ChevronDown` icon indicating its state. By default, **Account** and **Security** sections are expanded; all others start collapsed.
+
+Collapsible sections:
+- Account (user avatar, sign out, username)
+- Security (biometric unlock, master password change)
+- Active Devices
+- Auto-Lock
+- Autofill
+- Data (Trash Bin, Import, Export, Delete Account)
+- Support & Feedback
+- About
+- Legal
+
+- **Introduced:** conversation `d6e0d263` (2026-03-20)
+- **Key Files:** `Settings.tsx`
+
+---
+
 ## 2. Developer / System Features
 
 ### 2.1 Structured Logging System
