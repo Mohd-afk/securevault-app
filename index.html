@@ -6,7 +6,7 @@
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' https://apis.google.com https://*.googleapis.com https://www.gstatic.com https://*.firebaseapp.com;
+        script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' https://apis.google.com https://*.googleapis.com https://www.gstatic.com https://*.firebaseapp.com https://*.fillout.com;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data: blob: https://*.googleusercontent.com;
@@ -15,10 +15,12 @@
           https://*.firebaseio.com
           https://*.firebaseapp.com
           https://*.cloudfunctions.net
-          wss://*.firebaseio.com;
+          wss://*.firebaseio.com
+          https://*.fillout.com;
         frame-src 'self'
           https://*.firebaseapp.com
-          https://accounts.google.com;
+          https://accounts.google.com
+          https://*.fillout.com;
         object-src 'none';
         base-uri 'self';
       " />
