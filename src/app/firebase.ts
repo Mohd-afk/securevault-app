@@ -15,7 +15,16 @@ const firebaseConfig = {
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+console.log('[Firebase] Initializing with project:', firebaseConfig.projectId);
+
+let app;
+try {
+    app = initializeApp(firebaseConfig);
+    console.log('[Firebase] App initialized successfully');
+} catch (err) {
+    console.error('[Firebase] INIT FAILED:', err);
+    throw err;
+}
 
 export const auth = getAuth(app);
 // "Remember me" — keep the user signed in across browser restarts

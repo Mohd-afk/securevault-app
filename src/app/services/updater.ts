@@ -46,7 +46,7 @@ interface UpdaterOptions {
  * 1. notifyAppReady() — tells the native plugin this JS bundle is healthy
  * 2. Fetch latest version metadata from Firestore
  * 3. Compare with locally stored version
- * 4. If newer: download bundle, apply silently or force-apply for critical updates
+ * 4. If newer: download bundle → set bundle → THEN persist version
  */
 export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
   // OTA updates only work on native platforms (Android/iOS), not web
@@ -58,7 +58,7 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
   try {
     // CRITICAL: Must be called first on every launch.
     // Tells the plugin "this bundle loaded successfully, don't roll back."
-    // If this is NOT called within 10 seconds, the plugin auto-rolls back.
+    // If this is NOT called within appReadyTimeout (15s), the plugin auto-rolls back.
     await CapacitorUpdater.notifyAppReady();
     log.info('notifyAppReady() sent — current bundle marked as healthy');
   } catch (err) {
@@ -115,14 +115,16 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
 
 /**
  * Download the update bundle and apply it.
- * - Critical updates: apply immediately (app restarts)
- * - Normal updates: set bundle for next launch (user doesn't notice)
+ *
+ * IMPORTANT: Version is persisted ONLY AFTER a successful set().
+ * If download or set fails, the local version key is NOT updated,
+ * ensuring the app retries on next launch.
  */
 async function downloadAndApply(remote: VersionMetadata): Promise<void> {
   log.info(`Downloading update bundle from: ${remote.url}`);
 
   try {
-    // Download the zip bundle to device storage
+    // Step 1: Download the zip bundle to device storage
     const bundle = await CapacitorUpdater.download({
       url: remote.url,
       version: remote.version,
@@ -130,20 +132,19 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
 
     log.info(`Download complete — bundle ID: ${bundle.version}`);
 
-    // Store the new version locally so we don't re-download next time
-    localStorage.setItem(LOCAL_VERSION_KEY, remote.version);
-
-    // Apply the bundle
+    // Step 2: Apply the bundle (may trigger app reload for critical updates)
     await CapacitorUpdater.set(bundle);
     log.info(`Bundle set successfully — version ${remote.version}`);
 
-    // For critical updates, the `set()` call triggers an immediate app reload.
-    // For non-critical updates, the new bundle activates on the next app launch.
-    // The plugin handles this distinction internally once `set()` is called.
+    // Step 3: ONLY persist version AFTER successful set()
+    // This is critical — if set() fails, we don't mark as updated,
+    // so the next launch will retry the download.
+    localStorage.setItem(LOCAL_VERSION_KEY, remote.version);
+    log.info(`Version ${remote.version} persisted to localStorage`);
 
   } catch (err) {
     log.error('Failed to download or apply update bundle', err);
-    // Don't update the local version key — this ensures we retry next launch
+    // DO NOT update the local version key — ensures retry on next launch
     throw err;
   }
 }

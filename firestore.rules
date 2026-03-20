@@ -22,5 +22,10 @@ service cloud.firestore {
       allow get: if true;
       allow create: if request.auth != null;
     }
+
+    // App config (OTA updates, etc) -> Anyone can read
+    match /app_config/{document=**} {
+      allow read: if true;
+    }
   }
 }

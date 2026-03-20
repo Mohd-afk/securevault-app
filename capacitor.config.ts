@@ -7,7 +7,9 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   plugins: {
     CapacitorUpdater: {
-      autoUpdate: false, // We control updates manually via updater.ts
+      autoUpdate: false,         // We control updates manually via updater.ts
+      appReadyTimeout: 15000,    // 15s — if notifyAppReady() not called, auto-rollback
+      resetWhenUpdate: true,     // Clear old bundles when a new update is applied
     },
   },
 };
