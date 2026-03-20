@@ -1,11 +1,13 @@
 // ─── SecureVault Auth Module ─────────────────────────────────────────
-// Wraps Firebase Auth for email logic (passwordless + derived keys) and Google Sign-In.
+// Wraps Firebase Auth for email logic (passwordless + derived keys).
+// Google Sign-In is removed — incompatible with Capacitor WebView.
+//
+// NOTE: All functions call getFirebaseAuth() lazily each time.
+// This ensures Firebase is always initialized before use.
 // ─────────────────────────────────────────────────────────────────────
 
 import {
     signInWithEmailAndPassword,
-    signInWithPopup,
-    GoogleAuthProvider,
     signOut as firebaseSignOut,
     onAuthStateChanged,
     sendSignInLinkToEmail,
@@ -17,7 +19,7 @@ import {
     linkWithCredential,
     type User,
 } from 'firebase/auth';
-import { auth } from './firebase';
+import { getFirebaseAuth } from './firebase';
 import { createLogger } from './utils/logger';
 
 const log = createLogger('AUTH');
@@ -29,18 +31,16 @@ export async function sendPasswordlessVerificationLink(email: string, mode: 'sig
     log.info('Sending passwordless verification link', { email, mode });
 
     const actionCodeSettings = {
-        // Automatically redirects back to app with the mode parameter
         url: `${window.location.origin}/?mode=${mode}`,
         handleCodeInApp: true,
     };
-    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-    // Save email locally to complete sign-in without asking again
+    await sendSignInLinkToEmail(getFirebaseAuth(), email, actionCodeSettings);
     window.localStorage.setItem('emailForSignIn', email);
     log.info('Verification link sent successfully', { email });
 }
 
 export function isVerificationLink(href: string): boolean {
-    const result = isSignInWithEmailLink(auth, href);
+    const result = isSignInWithEmailLink(getFirebaseAuth(), href);
     if (result) log.info('Detected magic verification link in URL');
     return result;
 }
@@ -50,23 +50,22 @@ export async function finishPasswordlessSignIn(href: string): Promise<User> {
     let email = window.localStorage.getItem('emailForSignIn');
     if (!email) {
         log.warn('No stored email found, prompting user');
-        // Fallback if the user opens the link on a different device or browser
         email = window.prompt('Please provide your email for confirmation');
     }
     if (!email) throw new Error('Email is required to complete sign-in.');
 
-    const result = await signInWithEmailLink(auth, email, href);
+    const result = await signInWithEmailLink(getFirebaseAuth(), email, href);
     window.localStorage.removeItem('emailForSignIn');
     log.info('Passwordless sign-in completed', { uid: result.user.uid, email });
     return result.user;
 }
 
 export async function finalizeMasterPasswordSetup(email: string, authKey: string): Promise<User> {
-    const user = auth.currentUser;
+    const user = getFirebaseAuth().currentUser;
     if (!user) throw new Error('No user is currently signed in to set the password.');
     
     try {
-        const hasPasswordProvider = user.providerData.some(p => p.providerId === "password");
+        const hasPasswordProvider = user.providerData.some((p) => p.providerId === "password");
 
         if (!hasPasswordProvider) {
             console.log("Linking password provider...");
@@ -79,7 +78,7 @@ export async function finalizeMasterPasswordSetup(email: string, authKey: string
         }
     } catch (error) {
         console.error("LINKING ERROR:", error);
-        throw error; // keep rejecting so the UI knows it failed
+        throw error;
     }
     
     return user;
@@ -87,10 +86,9 @@ export async function finalizeMasterPasswordSetup(email: string, authKey: string
 
 /**
  * Re-authenticate the current user before sensitive operations like password change.
- * Firebase requires recent authentication for `updatePassword`.
  */
 export async function reauthenticateUser(email: string, authKey: string): Promise<void> {
-    const user = auth.currentUser;
+    const user = getFirebaseAuth().currentUser;
     if (!user) throw new Error('No user is currently signed in.');
     log.info('Re-authenticating user before sensitive operation', { uid: user.uid, email });
 
@@ -106,27 +104,16 @@ export async function signInWithDerivedKey(
     authKey: string,
 ): Promise<User> {
     log.info('Signing in with derived auth key', { email });
-    const credential = await signInWithEmailAndPassword(auth, email, authKey);
+    const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, authKey);
     log.info('Sign-in with derived key successful', { uid: credential.user.uid });
     return credential.user;
-}
-
-// ── Google Sign-In ───────────────────────────────────────────────────
-
-const googleProvider = new GoogleAuthProvider();
-
-export async function signInWithGoogle(): Promise<User> {
-    log.info('Starting Google sign-in popup');
-    const result = await signInWithPopup(auth, googleProvider);
-    log.info('Google sign-in successful', { uid: result.user.uid, email: result.user.email });
-    return result.user;
 }
 
 // ── Sign Out ─────────────────────────────────────────────────────────
 
 export async function signOut(): Promise<void> {
     log.info('Signing out user');
-    await firebaseSignOut(auth);
+    await firebaseSignOut(getFirebaseAuth());
     log.info('Sign-out complete');
 }
 
@@ -135,7 +122,7 @@ export async function signOut(): Promise<void> {
 export function onAuthChange(
     callback: (user: User | null) => void,
 ): () => void {
-    return onAuthStateChanged(auth, (user) => {
+    return onAuthStateChanged(getFirebaseAuth(), (user) => {
         log.info('Auth state changed', { uid: user?.uid ?? null, email: user?.email ?? null });
         callback(user);
     });
@@ -144,5 +131,5 @@ export function onAuthChange(
 // ── Current User ─────────────────────────────────────────────────────
 
 export function getCurrentUser(): User | null {
-    return auth.currentUser;
+    return getFirebaseAuth().currentUser;
 }

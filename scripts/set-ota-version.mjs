@@ -20,10 +20,10 @@ const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(
 
 const body = {
   fields: {
-    version:      { stringValue:  '0.0.5' },
-    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.5.zip` },
+    version:      { stringValue:  '0.0.6' },
+    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.6.zip` },
     critical:     { booleanValue: false },
-    releaseNotes: { stringValue:  'Phase 2: Fix Firebase Auth persistence crash in WebView, disabled Google Auth' },
+    releaseNotes: { stringValue:  'Phase 1+2+3 OTA fix: notifyAppReady first, deferred Firebase init, cold-boot auth fix, Google auth removed' },
     releasedAt:   { stringValue:  new Date().toISOString() },
   }
 };

@@ -2,11 +2,15 @@
 // Checks Firebase for new versions on app boot, downloads update bundles
 // from Firebase Hosting, and applies them silently or with a force-screen.
 // Uses @capgo/capacitor-updater for native bundle swapping.
+//
+// NOTE: notifyAppReady() is NOT called here.
+// It is called DIRECTLY in App.tsx boot() BEFORE this service is invoked.
+// This guarantees the ready signal fires even if Firebase init fails.
 // ─────────────────────────────────────────────────────────────────────
 
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { getFirebaseDb } from '../firebase';
 import { createLogger } from '../utils/logger';
 import { Capacitor } from '@capacitor/core';
 
@@ -40,30 +44,19 @@ interface UpdaterOptions {
 // ─── Core Functions ─────────────────────────────────────────────────
 
 /**
- * Initialize the OTA updater. Call once on app boot (inside App.tsx useEffect).
+ * Check for OTA updates and apply if a newer version is found.
+ * Call AFTER notifyAppReady() and AFTER initFirebase() have both been called.
  *
  * Flow:
- * 1. notifyAppReady() — tells the native plugin this JS bundle is healthy
- * 2. Fetch latest version metadata from Firestore
- * 3. Compare with locally stored version
- * 4. If newer: download bundle → set bundle → THEN persist version
+ * 1. Fetch latest version metadata from Firestore
+ * 2. Compare with locally stored version
+ * 3. If newer: download bundle → set bundle → THEN persist version
  */
 export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
   // OTA updates only work on native platforms (Android/iOS), not web
   if (!Capacitor.isNativePlatform()) {
     log.debug('Skipping OTA updater — not a native platform');
     return;
-  }
-
-  try {
-    // CRITICAL: Must be called first on every launch.
-    // Tells the plugin "this bundle loaded successfully, don't roll back."
-    // If this is NOT called within appReadyTimeout (15s), the plugin auto-rolls back.
-    await CapacitorUpdater.notifyAppReady();
-    log.info('notifyAppReady() sent — current bundle marked as healthy');
-  } catch (err) {
-    log.error('Failed to call notifyAppReady()', err);
-    // Don't return — still try to check for updates
   }
 
   try {
@@ -81,6 +74,7 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   log.info('Checking for updates...');
 
   // 1. Read the latest version doc from Firestore
+  const db = getFirebaseDb();
   const versionRef = doc(db, VERSION_DOC_PATH, VERSION_DOC_ID);
   const snapshot = await getDoc(versionRef);
 
@@ -105,7 +99,6 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   log.info(`New version available: ${remote.version} (current: ${localVersion})`);
 
   if (remote.critical) {
-    // Critical update: notify the UI to show the force-update blocker
     log.warn('CRITICAL update — showing force-update screen');
     options.onCriticalUpdate?.();
   }
@@ -132,13 +125,11 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
 
     log.info(`Download complete — bundle ID: ${bundle.version}`);
 
-    // Step 2: Apply the bundle (may trigger app reload for critical updates)
+    // Step 2: Apply the bundle (triggers app reload)
     await CapacitorUpdater.set(bundle);
     log.info(`Bundle set successfully — version ${remote.version}`);
 
     // Step 3: ONLY persist version AFTER successful set()
-    // This is critical — if set() fails, we don't mark as updated,
-    // so the next launch will retry the download.
     localStorage.setItem(LOCAL_VERSION_KEY, remote.version);
     log.info(`Version ${remote.version} persisted to localStorage`);
 

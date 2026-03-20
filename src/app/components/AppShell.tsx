@@ -4,7 +4,7 @@ import { LockScreen } from './LockScreen';
 import { AuthScreen } from './AuthScreen';
 import { getSettings, clearSession, clearLocalVaultData, getVaultItems, permanentlyDeleteVaultItem } from '../store';
 import { onAuthChange, signOut, isVerificationLink } from '../auth';
-import { auth } from '../firebase';
+import { getFirebaseAuth } from '../firebase';
 import type { User } from 'firebase/auth';
 import { createLogger } from '../utils/logger';
 import { registerCurrentDevice, listenForRevocation, updateLastActive } from '../services/deviceSession';
@@ -19,6 +19,10 @@ export function AppShell() {
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether we've received ANY auth event yet during this boot.
+  // Firebase emits null first on cold boot while it restores from IndexedDB.
+  // We must NOT clearSession on that first null — it's not a sign-out.
+  const isInitialAuthEvent = useRef(true);
 
   // Check on mount if we're entering via a magic link
   useEffect(() => {
@@ -31,17 +35,29 @@ export function AppShell() {
   // ── Auth state listener ────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onAuthChange((firebaseUser) => {
+      const wasInitial = isInitialAuthEvent.current;
+      isInitialAuthEvent.current = false;
+
+      log.info('AppShell: Auth state change', {
+        uid: firebaseUser?.uid ?? null,
+        isInitialEvent: wasInitial,
+      });
+
       // If switching to a DIFFERENT user, clear stale local data
       if (firebaseUser && user && firebaseUser.uid !== user.uid) {
         log.info('AppShell: User switched, clearing stale data', { oldUid: user.uid, newUid: firebaseUser.uid });
         clearLocalVaultData().catch(console.error);
         clearSession();
       }
+
       setUser(firebaseUser);
       setAuthLoading(false);
-      // If user signs out, reset unlock state
-      if (!firebaseUser) {
-        log.info('AppShell: User signed out, resetting state');
+
+      // Only clearSession on a CONFIRMED sign-out (not the initial cold-boot null).
+      // On cold boot, Firebase emits null while still reading from IndexedDB.
+      // Clearing session during that window would destroy valid vault state.
+      if (!firebaseUser && !wasInitial) {
+        log.info('AppShell: Confirmed sign-out — clearing session');
         setUnlocked(false);
         clearSession();
       }
@@ -216,7 +232,7 @@ export function AppShell() {
     return <AuthScreen onAuthenticated={() => {
       // Completed account authentication
       setMagicLinkActive(false);
-      setUser(auth.currentUser);
+      setUser(getFirebaseAuth().currentUser);
       // Force all users to LockScreen to manage their vault state
       setUnlocked(false);
     }} />;
