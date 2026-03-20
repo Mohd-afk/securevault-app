@@ -3,8 +3,9 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { initializeApp } from 'firebase/app';
-import { getAuth, browserLocalPersistence, setPersistence } from 'firebase/auth';
+import { getAuth, browserLocalPersistence, indexedDBLocalPersistence, inMemoryPersistence, setPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -27,8 +28,31 @@ try {
 }
 
 export const auth = getAuth(app);
-// "Remember me" — keep the user signed in across browser restarts
-setPersistence(auth, browserLocalPersistence);
+
+// Async persistence setup to prevent synchronous boot crashes
+// Capacitor WebViews can restrict storage access heavily.
+const setupPersistence = async () => {
+    try {
+        if (Capacitor.isNativePlatform()) {
+            await setPersistence(auth, indexedDBLocalPersistence);
+            console.log('[Firebase] Auth persistence set to IndexedDB (Native)');
+        } else {
+            await setPersistence(auth, browserLocalPersistence);
+            console.log('[Firebase] Auth persistence set to LocalStorage (Web)');
+        }
+    } catch (err) {
+        console.warn('[Firebase] Primary persistence failed. Falling back to Memory.', err);
+        try {
+            await setPersistence(auth, inMemoryPersistence);
+            console.log('[Firebase] Auth persistence set to inMemory (Fallback)');
+        } catch (fallbackErr) {
+            console.error('[Firebase] Critical fallback persistence failure', fallbackErr);
+        }
+    }
+};
+
+// Fire without blocking the rest of the JS evaluation
+setupPersistence();
 
 export const db = getFirestore(app);
 export default app;

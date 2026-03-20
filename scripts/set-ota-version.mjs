@@ -20,10 +20,10 @@ const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(
 
 const body = {
   fields: {
-    version:      { stringValue:  '0.0.4' },
-    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.4.zip` },
+    version:      { stringValue:  '0.0.5' },
+    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.5.zip` },
     critical:     { booleanValue: false },
-    releaseNotes: { stringValue:  'OTA Architecture Fix: CSP, rollback protection, version persistence, error logging' },
+    releaseNotes: { stringValue:  'Phase 2: Fix Firebase Auth persistence crash in WebView, disabled Google Auth' },
     releasedAt:   { stringValue:  new Date().toISOString() },
   }
 };
