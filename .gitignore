@@ -5,3 +5,4 @@ pdfs_info/
 .env.local
 *-firebase-adminsdk-*.json
 vault-app-ba6e2-firebase-adminsdk-fbsvc-6c4a261f81.json
+ota-updates/bundles/*.zip

@@ -181,10 +181,12 @@ Users can:
 
 ### 1.12 Share / Referral
 
-**Description:** Users can share SecureVault via the Web Share API (on supported devices) or copy the app URL to clipboard.
+**Description:** Users can share SecureVault and specific password items via the native Share API (on Android devices using Capacitor Share) which opens the system app chooser, falling back to the Web Share API on supported browsers, or copying the text/URL to the clipboard.
 
 - **Introduced:** conversation `5c85fb1d` (2026-03-11)
-- **Key Files:** `Settings.tsx` (`handleShareApp`)
+- **Key Files:** `Settings.tsx` (`handleShareApp`), `ItemDetail.tsx` (`handleShare`)
+- **Later Changes:**
+  - Integrated `@capacitor/share` to provide a native app chooser share sheet for Android — conversation `f46bb8cb`
 
 ---
 
@@ -443,6 +445,23 @@ Collapsible sections:
   - `DatabaseKeyManager.kt` includes root-detection heuristics to preemptively disable biometric functionality on compromised devices.
 - **Key Files:** `security/BiometricKeyManager.kt`, `crypto.ts`, `store.ts` (`enableBiometricUnlock`, `unlockWithBiometric`)
 - **Related Commits:** conversation `5ef446b0`
+
+---
+
+### 2.13 Self-Hosted OTA Update System
+
+**Purpose:** Deliver silent, zero-cost over-the-air updates to Android users without APK reinstalls, using `@capgo/capacitor-updater` with Firebase Hosting as the CDN.
+
+- **Implementation:**
+  - `initUpdater()` called on app boot from `App.tsx` — calls `notifyAppReady()` (required safety signal) then checks Firestore for new versions
+  - Version metadata stored in Firestore `app_config/latest_version` (version, URL, critical flag)
+  - Update bundles (zipped `dist/` output) hosted on Firebase Hosting under `ota-updates/bundles/`
+  - **Normal updates:** Downloaded silently in background, applied on next app launch
+  - **Critical updates:** Full-screen blocker (`CriticalUpdateScreen.tsx`) shown, app restarts after apply
+  - Automatic rollback: if `notifyAppReady()` isn't called within 10s on a new bundle, the plugin reverts to the previous working version
+  - Release workflow: `npm run release` → `firebase deploy --only hosting` → update Firestore doc
+- **Key Files:** `services/updater.ts`, `components/CriticalUpdateScreen.tsx`, `scripts/release-ota.mjs`, `capacitor.config.ts`, `firebase.json`
+- **Related Commits:** conversation `47ac61c9`
 
 ---
 

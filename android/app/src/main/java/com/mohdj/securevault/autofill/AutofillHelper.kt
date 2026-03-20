@@ -11,7 +11,7 @@ class AutofillHelper {
     data class ParsedStructure(
         val usernameNodes: MutableList<AssistStructure.ViewNode> = mutableListOf(),
         val passwordNodes: MutableList<AssistStructure.ViewNode> = mutableListOf(),
-        val webDomain: String? = null
+        var webDomain: String? = null
     )
 
     fun parseStructure(structure: AssistStructure): ParsedStructure {

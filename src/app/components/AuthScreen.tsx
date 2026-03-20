@@ -506,7 +506,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     // ── Set up Master Password Screen ───────────────────────────────
     if (mode === 'setup_master') {
         return (
-            <div className="min-h-screen bg-[#1a1a2e] flex flex-col items-center py-10 px-6 overflow-y-auto">
+            <div className="min-h-[100dvh] bg-[#1a1a2e] flex flex-col items-center justify-center px-6">
                 <div className="w-full max-w-sm flex flex-col items-center">
                     <div className="mb-6 flex flex-col items-center text-center">
                         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mb-4 shadow-lg shadow-cyan-500/20">

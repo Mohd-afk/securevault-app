@@ -9,6 +9,9 @@ import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
 import { toast } from 'sonner';
 import type { User } from 'firebase/auth';
 
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
+
 const TIMEOUT_OPTIONS = [
     { label: '1 minute', value: 1 },
     { label: '2 minutes', value: 2 },
@@ -411,8 +414,19 @@ export function Settings() {
         }
     };
 
-    const handleShareApp = () => {
-        if (navigator.share) {
+    const handleShareApp = async () => {
+        if (Capacitor.isNativePlatform()) {
+            try {
+                await Share.share({
+                    title: 'SecureVault',
+                    text: 'Check out SecureVault, a secure, zero-knowledge password manager!',
+                    url: window.location.origin,
+                    dialogTitle: 'Share SecureVault',
+                });
+            } catch (error) {
+                console.error('Error sharing', error);
+            }
+        } else if (navigator.share) {
             navigator.share({
                 title: 'SecureVault',
                 text: 'Check out SecureVault, a secure, zero-knowledge password manager!',
@@ -568,7 +582,7 @@ export function Settings() {
     return (
         <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
             {/* Header */}
-            <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5">
+            <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
                 <div className="flex items-center gap-3 px-4 py-3">
                     <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
                         <ArrowLeft className="w-5 h-5" />
@@ -922,14 +936,19 @@ export function Settings() {
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-2">
                                                     <p className="text-white text-sm truncate font-medium">{device.browser || 'Unknown Browser'}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <p className="text-gray-400 text-xs truncate flex items-center gap-1">
+                                                        {device.os || 'Unknown OS'}
+                                                        {device.city && ` • ${device.city}, ${device.country}`}
+                                                    </p>
                                                     {isCurrent && (
-                                                        <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded uppercase tracking-wider font-semibold">This Device</span>
+                                                        <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md font-medium">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                                            Current
+                                                        </span>
                                                     )}
                                                 </div>
-                                                <p className="text-gray-400 text-xs truncate flex items-center gap-1">
-                                                    {device.os || 'Unknown OS'}
-                                                    {device.city && ` • ${device.city}, ${device.country}`}
-                                                </p>
                                                 <p className="text-gray-500 text-[11px] mt-0.5 flex items-center gap-1">
                                                     <Clock className="w-3 h-3" /> {timeStr}
                                                 </p>

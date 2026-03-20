@@ -140,7 +140,7 @@ class BiometricBridgePlugin : Plugin() {
 
     @PluginMethod
     fun syncAutoLockTimeout(call: PluginCall) {
-        val timeoutMinutes = call.getInt("timeoutMinutes", 5)
+        val timeoutMinutes = call.getInt("timeoutMinutes", 5) ?: 5
         BiometricVaultUnlocker.setAutoLockTimeout(timeoutMinutes)
         call.resolve(JSObject().put("success", true))
     }

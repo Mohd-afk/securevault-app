@@ -85,7 +85,7 @@ export function PasswordList({ onLock, user }: PasswordListProps) {
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5">
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
@@ -220,7 +220,8 @@ export function PasswordList({ onLock, user }: PasswordListProps) {
       {/* FAB */}
       <button
         onClick={() => navigate('/add')}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 active:scale-95 transition-transform z-20"
+        className="fixed right-6 w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 active:scale-95 transition-transform z-20"
+        style={{ bottom: 'max(env(safe-area-inset-bottom), 1.5rem)' }}
       >
         <Plus className="w-6 h-6" />
       </button>

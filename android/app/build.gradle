@@ -21,15 +21,15 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = '21'
     }
 }
 
@@ -53,11 +53,11 @@ dependencies {
     // Autofill / Native vault dependencies
     implementation "net.zetetic:android-database-sqlcipher:4.5.4"
     implementation "androidx.sqlite:sqlite:2.4.0"
-    implementation "androidx.room:room-runtime:2.6.1"
-    implementation "androidx.room:room-ktx:2.6.1"
-    kapt "androidx.room:room-compiler:2.6.1"
+    implementation "androidx.room:room-runtime:2.8.4"
+    implementation "androidx.room:room-ktx:2.8.4"
+    kapt "androidx.room:room-compiler:2.8.4"
     implementation "androidx.biometric:biometric:1.2.0-alpha05"
-    implementation "de.nickyg.argon2:argon2-android:1.0.0" 
+
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
 }
 

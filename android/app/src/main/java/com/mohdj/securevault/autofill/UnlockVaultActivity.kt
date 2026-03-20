@@ -1,8 +1,11 @@
 package com.mohdj.securevault.autofill
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.view.autofill.AutofillId
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
@@ -13,8 +16,11 @@ import com.mohdj.securevault.security.BiometricVaultUnlocker
 
 class UnlockVaultActivity : AppCompatActivity() {
 
+    private var domain: String = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        domain = intent.getStringExtra("DOMAIN") ?: ""
         
         // Activity is transparent, just immediately show prompt
         showBiometricPrompt()
@@ -44,7 +50,7 @@ class UnlockVaultActivity : AppCompatActivity() {
                             TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.BIOMETRIC_SUCCESS, domain)
                             
                             // Return success to the AutofillService
-                            val intent = Intent().apply {
+                            val resultIntent = Intent().apply {
                                 putExtra("SUCCESS", true)
                                 putExtra("DOMAIN", domain)
                                 val uIds = intent.getParcelableArrayListExtra<AutofillId>("USERNAME_IDS")
@@ -52,7 +58,7 @@ class UnlockVaultActivity : AppCompatActivity() {
                                 if (uIds != null) putParcelableArrayListExtra("USERNAME_IDS", uIds)
                                 if (pIds != null) putParcelableArrayListExtra("PASSWORD_IDS", pIds)
                             }
-                            setResult(Activity.RESULT_OK, intent)
+                            setResult(Activity.RESULT_OK, resultIntent)
                             finish()
                         } catch (e: Exception) {
                             Log.e("UnlockVaultActivity", "Failed to unwrap DEK", e)

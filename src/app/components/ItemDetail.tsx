@@ -4,6 +4,8 @@ import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Glo
 import { getVaultItem, deleteVaultItem, permanentlyDeleteVaultItem, restoreVaultItem, type ItemType } from '../store';
 import { format, differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
 
 const typeIcons: Record<ItemType, React.ReactNode> = {
   Website: <Globe className="w-5 h-5 text-cyan-400" />,
@@ -71,7 +73,17 @@ export function ItemDetail() {
 
   const handleShare = async () => {
     const text = `${item.title}\nUsername: ${item.username || 'N/A'}\nPassword: ${item.password}${item.url ? `\nURL: ${item.url}` : ''}`;
-    if (navigator.share) {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Share.share({
+          title: item.title,
+          text: text,
+          dialogTitle: 'Share Password'
+        });
+      } catch (error) {
+        copyToClipboard(text, 'share');
+      }
+    } else if (navigator.share) {
       try {
         await navigator.share({ title: item.title, text });
       } catch {
@@ -87,7 +99,7 @@ export function ItemDetail() {
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5">
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center gap-3 px-4 py-3">
           <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
             <ArrowLeft className="w-5 h-5" />

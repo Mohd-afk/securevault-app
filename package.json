@@ -12,6 +12,7 @@
     "@capacitor/android": "^8.2.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/core": "^8.2.0",
+    "@capacitor/share": "^8.0.1",
     "@capgo/capacitor-updater": "^8.43.11",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",

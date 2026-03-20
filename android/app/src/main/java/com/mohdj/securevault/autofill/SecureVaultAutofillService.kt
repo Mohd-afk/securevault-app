@@ -121,7 +121,7 @@ class SecureVaultAutofillService : AutofillService() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 // If Vault is locked, return an authentication Dataset
-                if (BiometricVaultUnlocker.isLocked()) {
+                if (!BiometricVaultUnlocker.isVaultUnlocked()) {
                     Log.i("SecureVaultAutofill", "Vault is locked. Returning Biometric Authentication Dataset.")
                     TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.BIOMETRIC_PROMPT_SHOWN, normalizedDomain)
                     val intent = Intent(this@SecureVaultAutofillService, UnlockVaultActivity::class.java).apply {
@@ -361,12 +361,13 @@ class SecureVaultAutofillService : AutofillService() {
                     username = username,
                     encryptedPassword = encryptedPasswordString,
                     uris = normalizedDomain,
+                    type = "Website",
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis(),
                     deletedAt = null
                 )
 
-                vaultRepository.insertAll(listOf(newItem))
+                vaultRepository.insert(newItem)
                 Log.i("SecureVaultAutofill", "Successfully saved new credential for $normalizedDomain")
                 TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.SAVE_SUCCESS, normalizedDomain)
                 callback.onSuccess()
