@@ -4,7 +4,7 @@ import {
   serverTimestamp, collection, query, getDocs, getDoc,
   Unsubscribe
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { getFirebaseDb } from '../firebase';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('SESSION');
@@ -62,7 +62,7 @@ export async function getIpLocation(): Promise<{ ip: string; city: string; count
 /** Detects if the user is logging in from a significantly new place */
 async function checkLocationAlert(uid: string, newLocation: {city: string; country: string}) {
   try {
-    const devicesRef = collection(db, `users/${uid}/devices`);
+    const devicesRef = collection(getFirebaseDb(), `users/${uid}/devices`);
     const q = query(devicesRef);
     const snap = await getDocs(q);
     
@@ -97,7 +97,7 @@ export async function updateLastActive(uid: string) {
   
   try {
     const deviceId = getLocalDeviceId();
-    const deviceRef = doc(db, `users/${uid}/devices/${deviceId}`);
+    const deviceRef = doc(getFirebaseDb(), `users/${uid}/devices/${deviceId}`);
     // Use merge: true so we don't overwrite if it doesn't exist yet, or just update
     await setDoc(deviceRef, {
       lastActive: serverTimestamp()
@@ -120,7 +120,7 @@ export async function registerCurrentDevice(uid: string) {
         await checkLocationAlert(uid, { city: location.city, country: location.country });
     }
 
-    const deviceRef = doc(db, `users/${uid}/devices/${deviceId}`);
+    const deviceRef = doc(getFirebaseDb(), `users/${uid}/devices/${deviceId}`);
     
     // Check if device already exists
     const deviceSnap = await getDoc(deviceRef);
@@ -157,7 +157,7 @@ export async function registerCurrentDevice(uid: string) {
 }
 
 export function subscribeToDevices(uid: string, onDevicesChanged: (devices: DeviceSession[]) => void): Unsubscribe {
-  const devicesRef = collection(db, `users/${uid}/devices`);
+  const devicesRef = collection(getFirebaseDb(), `users/${uid}/devices`);
   const q = query(devicesRef);
 
   return onSnapshot(q, (snap) => {
@@ -177,12 +177,12 @@ export function subscribeToDevices(uid: string, onDevicesChanged: (devices: Devi
 export async function revokeDevice(uid: string, targetDeviceId: string) {
   try {
     // 1. Delete target device document
-    const targetRef = doc(db, `users/${uid}/devices/${targetDeviceId}`);
+    const targetRef = doc(getFirebaseDb(), `users/${uid}/devices/${targetDeviceId}`);
     await deleteDoc(targetRef);
     log.info('Revoked device', { targetDeviceId });
 
     // 2. Bump tokenVersion
-    const tokenRef = doc(db, `users/${uid}/data/tokenVersion`);
+    const tokenRef = doc(getFirebaseDb(), `users/${uid}/data/tokenVersion`);
     
     const tokenSnap = await getDoc(tokenRef);
     let currentVersion = 0;
@@ -201,7 +201,7 @@ export async function revokeDevice(uid: string, targetDeviceId: string) {
 export async function revokeAllOtherDevices(uid: string) {
   try {
     const currentDeviceId = getLocalDeviceId();
-    const devicesRef = collection(db, `users/${uid}/devices`);
+    const devicesRef = collection(getFirebaseDb(), `users/${uid}/devices`);
     const snap = await getDocs(query(devicesRef));
     
     const deletePromises: Promise<void>[] = [];
@@ -219,7 +219,7 @@ export async function revokeAllOtherDevices(uid: string) {
     log.info('Revoked all other devices', { count });
 
     // Bump tokenVersion
-    const tokenRef = doc(db, `users/${uid}/data/tokenVersion`);
+    const tokenRef = doc(getFirebaseDb(), `users/${uid}/data/tokenVersion`);
     const tokenSnap = await getDoc(tokenRef);
     let currentVersion = 0;
     if (tokenSnap.exists() && typeof tokenSnap.data().version === 'number') {
@@ -241,7 +241,7 @@ export function listenForRevocation(uid: string, onRevoked: () => void): () => v
   const currentDeviceId = getLocalDeviceId();
   
   // 1. Listen to current device doc deletion
-  const deviceRef = doc(db, `users/${uid}/devices/${currentDeviceId}`);
+  const deviceRef = doc(getFirebaseDb(), `users/${uid}/devices/${currentDeviceId}`);
   const unsubDevice = onSnapshot(deviceRef, (snap) => {
     // If we're listening and the doc disappears, we've been revoked
     // Check if it exists... sometimes initial load might be empty, wait, it should exist
@@ -253,7 +253,7 @@ export function listenForRevocation(uid: string, onRevoked: () => void): () => v
   });
 
   // 2. Listen to tokenVersion increment
-  const tokenRef = doc(db, `users/${uid}/data/tokenVersion`);
+  const tokenRef = doc(getFirebaseDb(), `users/${uid}/data/tokenVersion`);
   const unsubToken = onSnapshot(tokenRef, (snap) => {
     if (snap.exists() && typeof snap.data().version === 'number') {
       const serverVersion = snap.data().version;

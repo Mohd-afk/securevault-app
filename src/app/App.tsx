@@ -15,41 +15,38 @@ export default function App() {
 
   useEffect(() => {
     const boot = async () => {
+      console.log('[BOOT] Starting boot sequence...');
+
       // ─────────────────────────────────────────────────────────────────
       // STEP 1: notifyAppReady() — ABSOLUTE FIRST THING.
       // This MUST run before any other await. If this doesn't fire within
-      // appReadyTimeout (15s in capacitor.config.ts), the plugin rolls back.
+      // appReadyTimeout (15s), the plugin rolls back.
       // ─────────────────────────────────────────────────────────────────
       if (Capacitor.isNativePlatform()) {
         try {
           await CapacitorUpdater.notifyAppReady();
           console.log('[BOOT] notifyAppReady() fired — bundle marked healthy');
         } catch (err) {
-          // Log but don't stop — bundle health is best-effort
           console.error('[BOOT] notifyAppReady() failed:', err);
         }
       }
 
       // ─────────────────────────────────────────────────────────────────
       // STEP 2: Initialize Firebase.
-      // Wrapped in try/catch — a Firebase failure must NOT prevent render.
-      // If Firebase fails here, the app still shows UI (auth will fail gracefully).
+      // Wrapped in try/catch — failure must NOT prevent render.
       // ─────────────────────────────────────────────────────────────────
       try {
         await initFirebase();
         console.log('[BOOT] Firebase initialized');
       } catch (err) {
-        // Firebase init failure is serious but not fatal for the shell
-        console.error('[BOOT] Firebase init failed — app will work in degraded mode:', err);
+        console.error('[BOOT] Firebase init failed:', err);
         setBootError('Firebase initialization failed. Some features may be unavailable.');
-        // Still complete boot — do NOT block render
         setBootComplete(true);
         return;
       }
 
       // ─────────────────────────────────────────────────────────────────
       // STEP 3: Check for OTA updates (non-blocking).
-      // This happens after Firebase is ready. Failure is silently logged.
       // ─────────────────────────────────────────────────────────────────
       try {
         await initUpdater({ onCriticalUpdate: () => setCriticalUpdate(true) });
@@ -59,13 +56,12 @@ export default function App() {
       }
 
       setBootComplete(true);
+      console.log('[BOOT] Boot sequence complete');
     };
 
     boot();
   }, []);
 
-  // Show a minimal loading UI while boot sequence runs
-  // This is intentionally minimal — no Firebase dependency needed
   if (!bootComplete) {
     return (
       <div style={{

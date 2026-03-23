@@ -37,16 +37,7 @@ export function getFirebaseDb(): Firestore {
 // Keep legacy exports pointing to lazy getters for backward compatibility.
 // Components that import { auth } or { db } will get the live value
 // once initFirebase() has been called at boot.
-export const auth = new Proxy({} as Auth, {
-    get(_, prop) {
-        return getFirebaseAuth()[prop as keyof Auth];
-    },
-});
-export const db = new Proxy({} as Firestore, {
-    get(_, prop) {
-        return getFirebaseDb()[prop as keyof Firestore];
-    },
-});
+// NOTE: No Proxy exports. All consumers use getFirebaseAuth() and getFirebaseDb() directly.
 
 // ── Main init function ───────────────────────────────────────────────
 

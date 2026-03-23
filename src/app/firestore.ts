@@ -8,7 +8,7 @@ import {
     writeBatch,
     type Unsubscribe,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { getFirebaseDb } from './firebase';
 import type { EncryptedPayload } from './crypto';
 import type { AppSettings } from './store';
 import { createLogger } from './utils/logger';
@@ -18,23 +18,23 @@ const log = createLogger('FIRESTORE');
 // ── Firestore paths ──────────────────────────────────────────────────
 
 function vaultDocRef(uid: string) {
-    return doc(db, 'users', uid, 'data', 'vault');
+    return doc(getFirebaseDb(), 'users', uid, 'data', 'vault');
 }
 
 function settingsDocRef(uid: string) {
-    return doc(db, 'users', uid, 'data', 'settings');
+    return doc(getFirebaseDb(), 'users', uid, 'data', 'settings');
 }
 
 function profileDocRef(uid: string) {
-    return doc(db, 'users', uid, 'data', 'profile');
+    return doc(getFirebaseDb(), 'users', uid, 'data', 'profile');
 }
 
 function usernameDocRef(username: string) {
-    return doc(db, 'usernames', username);
+    return doc(getFirebaseDb(), 'usernames', username);
 }
 
 function registeredEmailDocRef(hash: string) {
-    return doc(db, 'registered_emails', hash);
+    return doc(getFirebaseDb(), 'registered_emails', hash);
 }
 
 // ── Email registration (Option 3 for Enumeration Protection) ────────
@@ -185,7 +185,7 @@ export async function loadSettingsFromCloud(
 export async function deleteCloudVault(uid: string): Promise<void> {
     log.warn('Deleting cloud vault data', { uid });
     // Delete vault and settings subdocuments (NOT the parent user doc)
-    const batch = writeBatch(db);
+    const batch = writeBatch(getFirebaseDb());
     batch.delete(vaultDocRef(uid));
     batch.delete(settingsDocRef(uid));
     await batch.commit();
@@ -210,7 +210,7 @@ export async function checkUsernameAvailable(username: string): Promise<boolean>
  */
 export async function claimUsername(uid: string, username: string): Promise<void> {
     log.info('Claiming username', { uid, username });
-    const batch = writeBatch(db);
+    const batch = writeBatch(getFirebaseDb());
     batch.set(usernameDocRef(username), { uid, createdAt: serverTimestamp() });
     batch.set(profileDocRef(uid), { username, updatedAt: serverTimestamp() });
     await batch.commit();
@@ -237,7 +237,7 @@ export async function getUsernameForUid(uid: string): Promise<string | null> {
  */
 export async function changeUsername(uid: string, oldUsername: string, newUsername: string): Promise<void> {
     log.info('Changing username', { uid, oldUsername, newUsername });
-    const batch = writeBatch(db);
+    const batch = writeBatch(getFirebaseDb());
     batch.delete(usernameDocRef(oldUsername));
     batch.set(usernameDocRef(newUsername), { uid, createdAt: serverTimestamp() });
     batch.set(profileDocRef(uid), { username: newUsername, updatedAt: serverTimestamp() });
