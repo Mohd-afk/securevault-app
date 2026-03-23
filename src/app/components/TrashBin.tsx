@@ -86,7 +86,7 @@ export function TrashBin() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-[max(env(safe-area-inset-bottom),_20px)] space-y-4">
         {/* Notice Card */}
         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
           <Clock className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />

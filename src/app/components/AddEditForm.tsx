@@ -61,7 +61,7 @@ export function AddEditForm() {
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5">
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
@@ -186,7 +186,7 @@ export function AddEditForm() {
       )}
 
       {/* Footer Buttons */}
-      <div className="sticky bottom-0 bg-[#1a1a2e]/95 backdrop-blur-sm border-t border-white/5 px-4 py-4 flex gap-3 justify-end">
+      <div className="sticky bottom-0 bg-[#1a1a2e]/95 backdrop-blur-sm border-t border-white/5 px-4 py-4 flex gap-3 justify-end pb-[max(env(safe-area-inset-bottom),_16px)]">
         <button
           onClick={() => navigate(-1)}
           className="px-6 py-2.5 rounded-xl border border-gray-600 text-gray-300 hover:bg-white/5 transition-colors"

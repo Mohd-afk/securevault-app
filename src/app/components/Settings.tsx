@@ -592,7 +592,7 @@ export function Settings() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+            <div className="flex-1 overflow-y-auto px-4 pt-5 pb-[max(env(safe-area-inset-bottom),_20px)] space-y-5">
                 {/* Account Section */}
                 <div>
                     <button

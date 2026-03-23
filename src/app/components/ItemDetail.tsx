@@ -112,7 +112,7 @@ export function ItemDetail() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-[max(env(safe-area-inset-bottom),_20px)] space-y-5">
         {/* Trash banner */}
         {isTrashed && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start gap-3">
