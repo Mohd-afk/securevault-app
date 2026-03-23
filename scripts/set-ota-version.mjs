@@ -20,10 +20,10 @@ const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(
 
 const body = {
   fields: {
-    version:      { stringValue:  '0.0.7' },
-    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.7.zip` },
+    version:      { stringValue:  '0.0.8' },
+    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.8.zip` },
     critical:     { booleanValue: false },
-    releaseNotes: { stringValue:  'BARE MINIMUM OTA TEST — zero Firebase, zero auth, just notifyAppReady + static div' },
+    releaseNotes: { stringValue:  'UI safe area fixes for mobile devices' },
     releasedAt:   { stringValue:  new Date().toISOString() },
   }
 };

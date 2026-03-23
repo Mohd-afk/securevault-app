@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare } from 'lucide-react';
+import packageJson from '../../../package.json';
 import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
@@ -1435,7 +1436,7 @@ export function Settings() {
                         <div className="bg-[#16213e] rounded-xl p-4 space-y-2">
                         <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">Version</span>
-                            <span className="text-gray-300 text-xs">2.0.0</span>
+                            <span className="text-gray-300 text-xs">{packageJson.version}</span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">Encryption</span>
