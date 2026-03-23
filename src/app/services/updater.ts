@@ -123,16 +123,18 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
       version: remote.version,
     });
 
-    log.info(`Download complete — bundle ID: ${bundle.version}`);
+    log.info(`Download complete — bundle ID: ${bundle.id}`);
 
-    // Step 2: Apply the bundle (triggers app reload)
-    await CapacitorUpdater.set(bundle);
-    log.info(`Bundle set successfully — version ${remote.version}`);
-
-    // Step 3: ONLY persist version AFTER successful set()
+    // Step 2: ONLY persist version BEFORE set() 
+    // .set() is a terminal command that destroys the JS context and reloads the app.
+    // If we place this below .set(), it never runs, and the app will infinite-loop updating on next boot.
     localStorage.setItem(LOCAL_VERSION_KEY, remote.version);
     log.info(`Version ${remote.version} persisted to localStorage`);
 
+    // Step 3: Apply the bundle (triggers immediate app reload)
+    // CRITICAL: We must strictly pass ONLY { id: bundle.id } to avoid crashing the native Capgo Swift/Java bridge
+    await CapacitorUpdater.set({ id: bundle.id });
+    
   } catch (err) {
     log.error('Failed to download or apply update bundle', err);
     // DO NOT update the local version key — ensures retry on next launch

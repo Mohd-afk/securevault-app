@@ -20,10 +20,10 @@ const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(
 
 const body = {
   fields: {
-    version:      { stringValue:  '0.0.8' },
-    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.8.zip` },
-    critical:     { booleanValue: false },
-    releaseNotes: { stringValue:  'UI safe area fixes for mobile devices' },
+    version:      { stringValue:  '0.0.9' },
+    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.9.zip` },
+    critical:     { booleanValue: false }, // Set to true if this is a mandatory security update
+    releaseNotes: { stringValue:  'Critical fixes for OTA updates: Fixed Native Bridge Error and Infinite Reload traps.' },
     releasedAt:   { stringValue:  new Date().toISOString() },
   }
 };
