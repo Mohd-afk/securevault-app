@@ -71,6 +71,7 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
  * Fetch version metadata from Firestore, compare, and apply if newer.
  */
 async function checkForUpdate(options: UpdaterOptions): Promise<void> {
+  console.log("Updater started");
   log.info('Checking for updates...');
 
   // 1. Read the latest version doc from Firestore
@@ -84,6 +85,7 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   }
 
   const remote = snapshot.data() as VersionMetadata;
+  console.log("Remote version:", remote.version);
   log.info(`Remote version: ${remote.version}`, { critical: remote.critical });
 
   // 2. Compare with locally stored version
@@ -114,7 +116,7 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
  * ensuring the app retries on next launch.
  */
 async function downloadAndApply(remote: VersionMetadata): Promise<void> {
-  log.info(`Downloading update bundle from: ${remote.url}`);
+  console.log("Updater started: Downloading update bundle from:", remote.url);
 
   try {
     // Step 1: Download the zip bundle to device storage
@@ -123,21 +125,20 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
       version: remote.version,
     });
 
-    log.info(`Download complete — bundle ID: ${bundle.id}`);
+    console.log("Downloaded bundle:", bundle);
 
     // Step 2: ONLY persist version BEFORE set() 
-    // .set() is a terminal command that destroys the JS context and reloads the app.
-    // If we place this below .set(), it never runs, and the app will infinite-loop updating on next boot.
     localStorage.setItem(LOCAL_VERSION_KEY, remote.version);
-    log.info(`Version ${remote.version} persisted to localStorage`);
+    console.log(`Version ${remote.version} persisted to localStorage`);
 
     // Step 3: Apply the bundle (triggers immediate app reload)
-    // CRITICAL: We must strictly pass ONLY { id: bundle.id } to avoid crashing the native Capgo Swift/Java bridge
     await CapacitorUpdater.set({ id: bundle.id });
     
+    console.log("SET CALLED SUCCESSFULLY");
   } catch (err) {
-    log.error('Failed to download or apply update bundle', err);
+    console.error('Failed to download or apply update bundle', err);
     // DO NOT update the local version key — ensures retry on next launch
     throw err;
   }
 }
+
