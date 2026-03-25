@@ -64,6 +64,8 @@ On returning visits, users sign in using their email + master password (derived 
 - **Later Changes:**
   - `deletedAt` soft-delete field added for trash bin — `4fba41d3`
   - Bulk add support for CSV import — `4fba41d3`
+  - Fixed mobile UI system bars overlap (battery/status) by enabling viewport-fit=cover — conversation `f46bb8cb`
+  - Hardened vault decryption reliability by forcing server-side fetch (`getDocFromServer`), bypassing stale offline caches that threw `WRONG_PASSWORD` errors on slow networks — conversation `f46bb8cb`
 
 ---
 

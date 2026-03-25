@@ -2,6 +2,7 @@ import {
     doc,
     setDoc,
     getDoc,
+    getDocFromServer,
     onSnapshot,
     serverTimestamp,
     deleteDoc,
@@ -97,8 +98,8 @@ export async function saveVaultToCloud(
 export async function loadVaultFromCloud(
     uid: string,
 ): Promise<{ encryptedPayload: EncryptedPayload; masterHash: string } | null> {
-    log.info('Loading vault from cloud', { uid });
-    const snap = await getDoc(vaultDocRef(uid));
+    log.info('Loading vault from cloud (forcing server fetch)', { uid });
+    const snap = await getDocFromServer(vaultDocRef(uid));
     if (!snap.exists()) {
         log.info('No vault document found in cloud', { uid });
         return null;
