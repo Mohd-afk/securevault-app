@@ -1,22 +1,20 @@
 #!/usr/bin/env node
 // ─── OTA Release Script ────────────────────────────────────────────
-// Zips the dist/ folder into ota-updates/bundles/{version}.zip
-// Run after `vite build`: npm run release
-//
-// After this script finishes:
-//   1. firebase deploy --only hosting
-//   2. Update Firestore doc: app_config/latest_version
+// Zips the dist/ folder, deploys to Firebase Hosting, and updates
+// the Firestore latest_version document all in one step.
+// Run after `vite build`: node scripts/release-ota.mjs
 // ─────────────────────────────────────────────────────────────────────
 
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync } from 'fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { execSync } from 'child_process';
+import admin from 'firebase-admin';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const DIST = join(ROOT, 'dist');
 const OTA_DIR = join(ROOT, 'ota-updates', 'bundles');
 
-// ─── Read version from package.json ─────────────────────────────────
+// ─── 1. Read version from package.json ──────────────────────────────
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'));
 const version = pkg.version;
 
@@ -30,46 +28,72 @@ if (!existsSync(DIST)) {
   process.exit(1);
 }
 
-// ─── Create output directory ────────────────────────────────────────
+// ─── 2. Create output directory ──────────────────────────────────────
 mkdirSync(OTA_DIR, { recursive: true });
 
 const zipPath = join(OTA_DIR, `${version}.zip`);
 
-// ─── Zip the dist folder ────────────────────────────────────────────
-// Uses PowerShell on Windows, zip on Unix
+// ─── 3. Zip the dist folder ──────────────────────────────────────────
 console.log(`📦 Zipping dist/ → ota-updates/bundles/${version}.zip`);
 
 try {
   if (process.platform === 'win32') {
-    // PowerShell Compress-Archive
     execSync(
       `powershell -Command "Compress-Archive -Path '${DIST}\\*' -DestinationPath '${zipPath}' -Force"`,
       { stdio: 'inherit' }
     );
   } else {
-    // Unix zip
     execSync(`cd "${DIST}" && zip -r "${zipPath}" .`, { stdio: 'inherit' });
   }
 } catch (err) {
   console.error('❌ Failed to create zip:', err.message);
   process.exit(1);
 }
+console.log(`✅ Bundle created: ota-updates/bundles/${version}.zip\n`);
 
-console.log('');
-console.log(`✅ Bundle created: ota-updates/bundles/${version}.zip`);
-console.log('');
-console.log('─── Next Steps ───────────────────────────────────────');
-console.log('');
-console.log('  1. Deploy to Firebase Hosting:');
-console.log('     firebase deploy --only hosting');
-console.log('');
-console.log('  2. Update Firestore document: app_config/latest_version');
-console.log(`     {`);
-console.log(`       "version": "${version}",`);
-console.log(`       "url": "https://<your-project>.web.app/bundles/${version}.zip",`);
-console.log(`       "critical": false,`);
-console.log(`       "releaseNotes": "...",`);
-console.log(`       "releasedAt": "${new Date().toISOString()}"`);
-console.log(`     }`);
-console.log('');
-console.log('─────────────────────────────────────────────────────');
+// ─── 4. Deploy to Firebase Hosting ──────────────────────────────────
+console.log(`🚀 Deploying to Firebase Hosting...`);
+try {
+  execSync('npx firebase-tools deploy --only hosting', { stdio: 'inherit', cwd: ROOT });
+} catch (err) {
+  console.error('❌ Firebase Hosting deploy failed. Aborting Firestore update.');
+  process.exit(1); // Release gate: don't update Firestore if hosting fails
+}
+console.log(`✅ Hosting deployment successful.\n`);
+
+// ─── 5. Update Firestore Metadata ───────────────────────────────────
+console.log(`📝 Updating Firestore app_config/latest_version...`);
+
+// Find the service account file
+const files = readdirSync(ROOT);
+const serviceAccountFile = files.find(f => f.startsWith('vault-app-ba6e2-firebase-adminsdk') && f.endsWith('.json'));
+
+if (!serviceAccountFile) {
+  console.error('❌ Could not find Firebase Admin service account JSON file matching vault-app-ba6e2-firebase-adminsdk... in root!');
+  process.exit(1);
+}
+
+try {
+  const serviceAccount = JSON.parse(readFileSync(join(ROOT, serviceAccountFile), 'utf-8'));
+  
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+
+  const db = admin.firestore();
+  await db.collection('app_config').doc('latest_version').set({
+    version: version,
+    url: `https://vault-app-ba6e2.web.app/bundles/${version}.zip`,
+    critical: false,
+    releaseNotes: `Automated release ${version}`,
+    releasedAt: new Date().toISOString()
+  });
+  
+  console.log(`✅ Firestore successfully updated to version ${version}`);
+} catch (err) {
+  console.error('❌ Failed to update Firestore:', err);
+  process.exit(1);
+}
+
+console.log('\n🎉 OTA Release completely finished successfully!');
+process.exit(0);

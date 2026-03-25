@@ -19,7 +19,8 @@ const log = createLogger('OTA');
 // ─── Constants ──────────────────────────────────────────────────────
 
 /** Key used in localStorage to track the currently running bundle version */
-const LOCAL_VERSION_KEY = 'sv_ota_current_version';
+const PENDING_VERSION_KEY = 'sv_ota_pending_version';
+const ACTIVE_VERSION_KEY = 'sv_ota_active_version';
 
 /** Firestore path: app_config/latest_version */
 const VERSION_DOC_PATH = 'app_config';
@@ -59,6 +60,21 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
     return;
   }
 
+  // Verification step: check if we just rebooted from an update
+  const pendingVersion = localStorage.getItem(PENDING_VERSION_KEY);
+  if (pendingVersion) {
+    log.info(`Promoting pending OTA version ${pendingVersion} to ACTIVE post-restart`);
+    localStorage.setItem(ACTIVE_VERSION_KEY, pendingVersion);
+    localStorage.removeItem(PENDING_VERSION_KEY);
+  }
+
+  try {
+    const bundle = await CapacitorUpdater.current();
+    log.info(`Post-boot verification - Current CapacitorUpdater bundle:`, bundle);
+  } catch (e) {
+    log.warn(`Could not verify current bundle from CapacitorUpdater:`, e);
+  }
+
   try {
     await checkForUpdate(options);
   } catch (err) {
@@ -88,17 +104,17 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   console.log("Remote version:", remote.version);
   log.info(`Remote version: ${remote.version}`, { critical: remote.critical });
 
-  // 2. Compare with locally stored version
-  const localVersion = localStorage.getItem(LOCAL_VERSION_KEY) || '0.0.0';
-  log.info(`Local version: ${localVersion}`);
+  // 2. Compare with locally stored active version
+  const activeVersion = localStorage.getItem(ACTIVE_VERSION_KEY) || '0.0.0';
+  log.info(`Local active version: ${activeVersion}`);
 
-  if (remote.version === localVersion) {
+  if (remote.version === activeVersion) {
     log.info('Already on latest version — no update needed');
     return;
   }
 
   // 3. New version available — download it
-  log.info(`New version available: ${remote.version} (current: ${localVersion})`);
+  log.info(`New version available: ${remote.version} (active: ${activeVersion})`);
 
   if (remote.critical) {
     log.warn('CRITICAL update — showing force-update screen');
@@ -127,17 +143,21 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
 
     console.log("Downloaded bundle:", bundle);
 
-    // Step 2: ONLY persist version BEFORE set() 
-    localStorage.setItem(LOCAL_VERSION_KEY, remote.version);
-    console.log(`Version ${remote.version} persisted to localStorage`);
+    // Step 2: Persist state as PENDING before applying.
+    // We do NOT set it as active until the next successful boot.
+    localStorage.setItem(PENDING_VERSION_KEY, remote.version);
+    console.log(`Version ${remote.version} marked as pending in localStorage`);
 
     // Step 3: Apply the bundle (triggers immediate app reload)
+    // NOTE: We are intentionally using .set() for immediate validation testing.
+    // For normal releases later, .next() is safer.
     await CapacitorUpdater.set({ id: bundle.id });
     
-    console.log("SET CALLED SUCCESSFULLY");
+    console.log("SET CALLED SUCCESSFULLY (You should not see this if the bridge correctly reloads the WebView)");
   } catch (err) {
     console.error('Failed to download or apply update bundle', err);
-    // DO NOT update the local version key — ensures retry on next launch
+    // Remove pending key if we failed to call set()
+    localStorage.removeItem(PENDING_VERSION_KEY);
     throw err;
   }
 }
