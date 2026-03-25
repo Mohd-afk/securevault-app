@@ -361,33 +361,34 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
 
   // Try cloud first
   if (uid && email) {
+    let cloudData = null;
     try {
       log.debug('Attempting to load vault from cloud', { uid });
-      const cloudData = await loadVaultFromCloud(uid);
-      if (cloudData?.encryptedPayload) {
-        // Decrypt — if password is wrong this THROWS (AES-GCM auth tag mismatch)
-        const key = await deriveEncryptionKey(password, email);
-        const plaintext = await decryptWithKey(cloudData.encryptedPayload, key);
-        items = JSON.parse(plaintext);
-        loadedFromCloud = true;
-        // Update local cache with cloud data
-        await idbSet(VAULT_KEY, cloudData.encryptedPayload);
-        log.info('Vault loaded from cloud', { itemCount: items.length });
+      cloudData = await loadVaultFromCloud(uid);
+    } catch (e: any) {
+      log.warn('Error loading vault from cloud (fallback to local)', e);
+      cloudNetworkError = true;
+    }
+
+    if (cloudData) {
+      if (cloudData.encryptedPayload) {
+        try {
+          // Decrypt — if password is wrong this THROWS (AES-GCM auth tag mismatch)
+          const key = await deriveEncryptionKey(password, email);
+          const plaintext = await decryptWithKey(cloudData.encryptedPayload, key);
+          items = JSON.parse(plaintext);
+          loadedFromCloud = true;
+          // Update local cache with cloud data
+          await idbSet(VAULT_KEY, cloudData.encryptedPayload);
+          log.info('Vault loaded from cloud', { itemCount: items.length });
+        } catch (e) {
+          log.error('Vault decryption failed — wrong master password', e);
+          throw new Error('WRONG_PASSWORD');
+        }
       } else {
         log.info('No vault data in cloud (new user)');
         // No vault exists yet — this is NOT an error, just a new user
         loadedFromCloud = true; // prevent local fallback
-      }
-    } catch (e) {
-      // Distinguish between NETWORK errors and DECRYPTION errors
-      const message = e instanceof Error ? e.message : String(e);
-      if (message.includes('network') || message.includes('unavailable') || message.includes('Failed to get document')) {
-        log.warn('Network error loading vault, will try local fallback', e);
-        cloudNetworkError = true;
-      } else {
-        // Decryption failure = WRONG PASSWORD. Do NOT fall back to local.
-        log.error('Vault decryption failed — wrong master password', e);
-        throw new Error('WRONG_PASSWORD');
       }
     }
   }
@@ -760,6 +761,11 @@ export async function changeMasterPassword(
     // 3. Re-encrypt vault data with the new encryption key
     log.debug('Step 3: Re-encrypting vault data with new password');
     const items = _cachedItems || [];
+    
+    // CRITICAL: Clear any cached biometric/session key derived from the old password!
+    // Otherwise saveVaultEverywhere will use the old key to encrypt the vault.
+    _sessionCryptoKey = null;
+    
     await saveVaultEverywhere(items, newPassword);
     log.info('Vault data re-encrypted with new password', { itemCount: items.length });
 

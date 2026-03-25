@@ -126,6 +126,7 @@ Includes a "Forgot Password" option that sends a password reset magic link.
 - **Later Changes:**
   - Dual key derivation (separate auth key vs encryption key) — `652f24b0`
   - Re-authentication flow improved with error handling — `ff5a0549`
+  - Fixed bug where `changeMasterPassword` incorrectly reused old `_sessionCryptoKey` from biometric unlock
 
 ---
 
