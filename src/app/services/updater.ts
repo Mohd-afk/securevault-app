@@ -18,8 +18,9 @@ const log = createLogger('OTA');
 
 // ─── Constants ──────────────────────────────────────────────────────
 
-/** Key used in localStorage to track the currently running bundle version */
+/** Keys used in localStorage to track the OTA update state */
 const PENDING_VERSION_KEY = 'sv_ota_pending_version';
+const PENDING_BUNDLE_ID_KEY = 'sv_ota_pending_bundle_id';
 const ACTIVE_VERSION_KEY = 'sv_ota_active_version';
 
 /** Firestore path: app_config/latest_version */
@@ -61,16 +62,25 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
   }
 
   // Verification step: check if we just rebooted from an update
-  const pendingVersion = localStorage.getItem(PENDING_VERSION_KEY);
-  if (pendingVersion) {
-    log.info(`Promoting pending OTA version ${pendingVersion} to ACTIVE post-restart`);
-    localStorage.setItem(ACTIVE_VERSION_KEY, pendingVersion);
-    localStorage.removeItem(PENDING_VERSION_KEY);
-  }
-
   try {
-    const bundle = await CapacitorUpdater.current();
-    log.info(`Post-boot verification - Current CapacitorUpdater bundle:`, bundle);
+    const pendingVersion = localStorage.getItem(PENDING_VERSION_KEY);
+    const pendingBundleId = localStorage.getItem(PENDING_BUNDLE_ID_KEY);
+    
+    const current = await CapacitorUpdater.current();
+    log.info(`Post-boot verification - Current CapacitorUpdater bundle:`, current);
+
+    if (pendingBundleId && current?.bundle?.id === pendingBundleId) {
+      log.info(`Promoting pending OTA version ${pendingVersion} to ACTIVE post-restart`);
+      if (pendingVersion) localStorage.setItem(ACTIVE_VERSION_KEY, pendingVersion);
+      localStorage.removeItem(PENDING_VERSION_KEY);
+      localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
+    } else if (pendingBundleId && current?.bundle?.id === 'builtin') {
+      log.warn(`OTA update failed to apply. Capgo is still on 'builtin'. Clearing pending state.`);
+      localStorage.removeItem(PENDING_VERSION_KEY);
+      localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
+    } else if (pendingVersion && !pendingBundleId) {
+      log.warn(`Found pending version without bundle ID. Skipping promotion to prevent false success state.`);
+    }
   } catch (e) {
     log.warn(`Could not verify current bundle from CapacitorUpdater:`, e);
   }
@@ -146,7 +156,8 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
     // Step 2: Persist state as PENDING before applying.
     // We do NOT set it as active until the next successful boot.
     localStorage.setItem(PENDING_VERSION_KEY, remote.version);
-    console.log(`Version ${remote.version} marked as pending in localStorage`);
+    localStorage.setItem(PENDING_BUNDLE_ID_KEY, bundle.id);
+    console.log(`Version ${remote.version} (bundle: ${bundle.id}) marked as pending in localStorage`);
 
     // Step 3: Apply the bundle (triggers immediate app reload)
     // NOTE: We are intentionally using .set() for immediate validation testing.
@@ -156,8 +167,9 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
     console.log("SET CALLED SUCCESSFULLY (You should not see this if the bridge correctly reloads the WebView)");
   } catch (err) {
     console.error('Failed to download or apply update bundle', err);
-    // Remove pending key if we failed to call set()
+    // Remove pending keys if we failed to call set()
     localStorage.removeItem(PENDING_VERSION_KEY);
+    localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
     throw err;
   }
 }

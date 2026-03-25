@@ -1,7 +1,7 @@
 # SecureVault — Feature & Architecture Documentation
 
-> **Last Updated:** 2026-03-16  
-> **Current Version:** 2.0.0  
+> **Last Updated:** 2026-03-25  
+> **Current Version:** 1.0.0  
 > **Repository:** Mohd-afk/securevault-app  
 > **Stack:** React 18 · Vite · Capacitor (Android) · Firebase (Auth, Firestore) · Kotlin (Native)
 
@@ -64,8 +64,9 @@ On returning visits, users sign in using their email + master password (derived 
 - **Later Changes:**
   - `deletedAt` soft-delete field added for trash bin — `4fba41d3`
   - Bulk add support for CSV import — `4fba41d3`
-  - Fixed mobile UI system bars overlap (battery/status) by enabling viewport-fit=cover — conversation `f46bb8cb`
+  - Fixed mobile UI system bars overlap (battery/status) by enabling `viewport-fit=cover` — conversation `f46bb8cb`
   - Hardened vault decryption reliability by forcing server-side fetch (`getDocFromServer`), bypassing stale offline caches that threw `WRONG_PASSWORD` errors on slow networks — conversation `f46bb8cb`
+  - Optimized vault loading performance with direct Firestore server-side queries.
 
 ---
 
@@ -456,15 +457,14 @@ Collapsible sections:
 **Purpose:** Deliver silent, zero-cost over-the-air updates to Android users without APK reinstalls, using `@capgo/capacitor-updater` with Firebase Hosting as the CDN.
 
 - **Implementation:**
-  - `initUpdater()` called on app boot from `App.tsx` — calls `notifyAppReady()` (required safety signal) then checks Firestore for new versions
-  - Version metadata stored in Firestore `app_config/latest_version` (version, URL, critical flag)
-  - Update bundles (zipped `dist/` output) hosted on Firebase Hosting under `ota-updates/bundles/`
-  - **Normal updates:** Downloaded silently in background, applied on next app launch
-  - **Critical updates:** Full-screen blocker (`CriticalUpdateScreen.tsx`) shown, app restarts after apply
-  - Automatic rollback: if `notifyAppReady()` isn't called within 10s on a new bundle, the plugin reverts to the previous working version
-  - Release workflow: `npm run release` → `firebase deploy --only hosting` → update Firestore doc
-- **Key Files:** `services/updater.ts`, `components/CriticalUpdateScreen.tsx`, `scripts/release-ota.mjs`, `capacitor.config.ts`, `firebase.json`
-- **Related Commits:** conversation `47ac61c9`
+  - `initUpdater()` called on app boot from `App.tsx` — calls `notifyAppReady()` (required safety signal) then checks Firestore for new versions.
+  - Version metadata stored in Firestore `app_config/latest_version` (version, bundle properties).
+  - Update bundles (zipped `dist/` output) hosted on Firebase Hosting under `ota-updates/bundles/`.
+  - **Automated Pipeline:** `npm run release` now builds, zips, deploys to Firebase Hosting, and updates Firestore atomically using `firebase-admin`.
+  - **State Safety:** Uses 3-state tracking (`sv_ota_pending_version`, `sv_ota_pending_bundle_id`, `sv_ota_active_version`) in `updater.ts`. Pending updates are strictly promoted to active only when post-restart verification confirms `CapacitorUpdater.current()` matches the expected bundle ID, ensuring no false success states.
+  - **Native Compatibility:** Strictly passes `{ id: bundle.id }` to the native bridge to ensure correct bundle application.
+- **Key Files:** `services/updater.ts`, `scripts/release-ota.mjs`, `capacitor.config.ts`, `firebase.json`
+- **Related Commits:** conversation `47ac61c9`, conversation `f46bb8cb`
 
 ---
 
