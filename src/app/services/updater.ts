@@ -67,20 +67,35 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
     const pendingBundleId = localStorage.getItem(PENDING_BUNDLE_ID_KEY);
     
     const current = await CapacitorUpdater.current();
-    log.info(`Post-boot verification - Current CapacitorUpdater bundle:`, current);
+    const currentBundleId = current?.bundle?.id || 'builtin';
+    const currentBundleVersion = current?.bundle?.version || 'N/A';
+    const isBuiltin = currentBundleId === 'builtin';
+    const bundleIdMatch = !!(pendingBundleId && currentBundleId === pendingBundleId);
 
-    if (pendingBundleId && current?.bundle?.id === pendingBundleId) {
+    log.info(`[OTA DIAGNOSTICS] Post-boot state:
+      - pendingVersion: ${pendingVersion}
+      - pendingBundleId: ${pendingBundleId}
+      - current.bundle.id: ${currentBundleId}
+      - current.bundle.version: ${currentBundleVersion}
+      - isBuiltin: ${isBuiltin}
+      - bundleIdMatch: ${bundleIdMatch}
+    `);
+
+    if (bundleIdMatch && !isBuiltin) {
       log.info(`Promoting pending OTA version ${pendingVersion} to ACTIVE post-restart`);
       if (pendingVersion) localStorage.setItem(ACTIVE_VERSION_KEY, pendingVersion);
       localStorage.removeItem(PENDING_VERSION_KEY);
       localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
-    } else if (pendingBundleId && current?.bundle?.id === 'builtin') {
-      log.warn(`OTA update failed to apply. Capgo is still on 'builtin'. Clearing pending state.`);
-      localStorage.removeItem(PENDING_VERSION_KEY);
-      localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
-    } else if (pendingVersion && !pendingBundleId) {
-      log.warn(`Found pending version without bundle ID. Skipping promotion to prevent false success state.`);
+    } else if (isBuiltin) {
+      if (pendingBundleId || pendingVersion) {
+        log.warn(`OTA update failed or was cleared. Capgo is on 'builtin'. Clearing any pending state to prevent false success loops.`);
+        localStorage.removeItem(PENDING_VERSION_KEY);
+        localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
+      }
+    } else if (!bundleIdMatch) {
+      log.warn(`Bundle mismatch. Expected ${pendingBundleId}, got ${currentBundleId}. Not promoting pending version.`);
     }
+
   } catch (e) {
     log.warn(`Could not verify current bundle from CapacitorUpdater:`, e);
   }

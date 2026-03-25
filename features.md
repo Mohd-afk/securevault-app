@@ -1,7 +1,7 @@
 # SecureVault — Feature & Architecture Documentation
 
 > **Last Updated:** 2026-03-25  
-> **Current Version:** 1.0.3  
+> **Current Version:** 1.0.4  
 > **Repository:** Mohd-afk/securevault-app  
 > **Stack:** React 18 · Vite · Capacitor (Android) · Firebase (Auth, Firestore) · Kotlin (Native)
 
