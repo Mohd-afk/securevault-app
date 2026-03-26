@@ -13,6 +13,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '../firebase';
 import { createLogger } from '../utils/logger';
 import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 
 const log = createLogger('OTA');
 
@@ -22,10 +23,52 @@ const log = createLogger('OTA');
 const PENDING_VERSION_KEY = 'sv_ota_pending_version';
 const PENDING_BUNDLE_ID_KEY = 'sv_ota_pending_bundle_id';
 const ACTIVE_VERSION_KEY = 'sv_ota_active_version';
+const FAILED_VERSIONS_KEY = 'sv_ota_failed_versions';
 
 /** Firestore path: app_config/latest_version */
 const VERSION_DOC_PATH = 'app_config';
 const VERSION_DOC_ID = 'latest_version';
+
+// ─── Helpers ────────────────────────────────────────────────────────
+
+/**
+ * Compare two semantic version strings.
+ * Returns 1 if v1 > v2, -1 if v1 < v2, 0 if v1 === v2.
+ */
+function compareVersions(v1: string, v2: string): number {
+  if (!v1 || !v2) return 0;
+  const p1 = v1.split('.').map(Number);
+  const p2 = v2.split('.').map(Number);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+function addFailedVersion(version: string) {
+  if (!version) return;
+  try {
+    const list = JSON.parse(localStorage.getItem(FAILED_VERSIONS_KEY) || '[]');
+    if (!list.includes(version)) {
+      list.push(version);
+      localStorage.setItem(FAILED_VERSIONS_KEY, JSON.stringify(list));
+    }
+  } catch (e) {
+    // Ignore JSON parse errors
+  }
+}
+
+function hasFailedVersion(version: string): boolean {
+  try {
+    const list = JSON.parse(localStorage.getItem(FAILED_VERSIONS_KEY) || '[]');
+    return list.includes(version);
+  } catch (e) {
+    return false;
+  }
+}
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -82,13 +125,15 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
     `);
 
     if (bundleIdMatch && !isBuiltin) {
-      log.info(`Promoting pending OTA version ${pendingVersion} to ACTIVE post-restart`);
+      log.info(`[OTA_EVENT: promoted] Promoting pending OTA version ${pendingVersion} to ACTIVE post-restart`);
       if (pendingVersion) localStorage.setItem(ACTIVE_VERSION_KEY, pendingVersion);
       localStorage.removeItem(PENDING_VERSION_KEY);
       localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
     } else if (isBuiltin) {
       if (pendingBundleId || pendingVersion) {
         log.warn(`OTA update failed or was cleared. Capgo is on 'builtin'. Clearing any pending state to prevent false success loops.`);
+        if (pendingVersion) addFailedVersion(pendingVersion);
+        log.warn(`[OTA_EVENT: rollback_detected] Version ${pendingVersion || 'unknown'} failed to boot native bundle. Recorded as failed.`);
         localStorage.removeItem(PENDING_VERSION_KEY);
         localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
       }
@@ -112,8 +157,7 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
  * Fetch version metadata from Firestore, compare, and apply if newer.
  */
 async function checkForUpdate(options: UpdaterOptions): Promise<void> {
-  console.log("Updater started");
-  log.info('Checking for updates...');
+  log.info(`[OTA_EVENT: check] Starting OTA check sequence...`);
 
   // 1. Read the latest version doc from Firestore
   const db = getFirebaseDb();
@@ -126,15 +170,33 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   }
 
   const remote = snapshot.data() as VersionMetadata;
-  console.log("Remote version:", remote.version);
-  log.info(`Remote version: ${remote.version}`, { critical: remote.critical });
+  log.info(`Remote version: ${remote.version}`, { critical: remote.critical, minAppVersion: remote.minAppVersion });
 
   // 2. Compare with locally stored active version
   const activeVersion = localStorage.getItem(ACTIVE_VERSION_KEY) || '0.0.0';
   log.info(`Local active version: ${activeVersion}`);
 
-  if (remote.version === activeVersion) {
-    log.info('Already on latest version — no update needed');
+  if (compareVersions(remote.version, activeVersion) <= 0) {
+    log.info(`[OTA_EVENT: check_skip] Already on latest or newer version (${activeVersion} >= ${remote.version}). No update needed.`);
+    return;
+  }
+
+  // 2.5 Ensure native minimum app version requirements are met
+  if (remote.minAppVersion) {
+    try {
+      const { version: nativeVersion } = await App.getInfo();
+      if (compareVersions(nativeVersion, remote.minAppVersion) < 0) {
+        log.warn(`[OTA_EVENT: check_failed] Remote update requires minAppVersion ${remote.minAppVersion}, but native app is ${nativeVersion}. Skipping.`);
+        return;
+      }
+    } catch (e) {
+      log.warn('Could not check native App version for minAppVersion enforcement', e);
+    }
+  }
+
+  // 2.6 Reject known broken bundles
+  if (hasFailedVersion(remote.version)) {
+    log.warn(`[OTA_EVENT: skip_failed] Remote version ${remote.version} previously failed to boot. Skipping to prevent infinite crash loop.`);
     return;
   }
 
@@ -157,7 +219,7 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
  * ensuring the app retries on next launch.
  */
 async function downloadAndApply(remote: VersionMetadata): Promise<void> {
-  console.log("Updater started: Downloading update bundle from:", remote.url);
+  log.info(`[OTA_EVENT: downloading] Downloading bundle from: ${remote.url}`);
 
   try {
     // Step 1: Download the zip bundle to device storage
@@ -166,20 +228,19 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
       version: remote.version,
     });
 
-    console.log("Downloaded bundle:", bundle);
+    log.info(`[OTA_EVENT: downloaded] Bundle: ${bundle.id}`);
 
     // Step 2: Persist state as PENDING before applying.
     // We do NOT set it as active until the next successful boot.
     localStorage.setItem(PENDING_VERSION_KEY, remote.version);
     localStorage.setItem(PENDING_BUNDLE_ID_KEY, bundle.id);
-    console.log(`Version ${remote.version} (bundle: ${bundle.id}) marked as pending in localStorage`);
+    log.info(`Version ${remote.version} (bundle: ${bundle.id}) marked as pending in localStorage`);
 
     // Step 3: Apply the bundle (triggers immediate app reload)
     // NOTE: We are intentionally using .set() for immediate validation testing.
     // For normal releases later, .next() is safer.
+    log.info(`[OTA_EVENT: set_called] Applying bundle ${bundle.id} for version ${remote.version}. Reloading...`);
     await CapacitorUpdater.set({ id: bundle.id });
-    
-    console.log("SET CALLED SUCCESSFULLY (You should not see this if the bridge correctly reloads the WebView)");
   } catch (err) {
     console.error('Failed to download or apply update bundle', err);
     // Remove pending keys if we failed to call set()

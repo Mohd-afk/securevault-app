@@ -242,12 +242,14 @@ export function listenForRevocation(uid: string, onRevoked: () => void): () => v
   
   // 1. Listen to current device doc deletion
   const deviceRef = doc(getFirebaseDb(), `users/${uid}/devices/${currentDeviceId}`);
+  let deviceDocInitialized = false;
   const unsubDevice = onSnapshot(deviceRef, (snap) => {
-    // If we're listening and the doc disappears, we've been revoked
-    // Check if it exists... sometimes initial load might be empty, wait, it should exist
-    // Actually, on first load, if we just registered, it will exist.
-    // If we register on unlock, we should be fine. Wait, let's watch out for race condition
-    // where listener fires before doc is written. Let's ignore it if we have sessionTokenVersion null? No.
+    if (snap.exists()) {
+      deviceDocInitialized = true;
+    } else if (deviceDocInitialized) {
+      log.warn('Current device document was deleted! Forcing logout.', { deviceId: currentDeviceId });
+      onRevoked();
+    }
   }, (err) => {
     log.error('Revocation listener (device) error', err);
   });

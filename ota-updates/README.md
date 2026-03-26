@@ -13,16 +13,18 @@ ota-updates/
     └── ...
 ```
 
-## How bundles are created
+## How bundles are created & deployed
 
-Run `npm run release` which:
-1. Builds the Vite project (`dist/`)
-2. Zips `dist/*` into `ota-updates/bundles/{version}.zip`
-
-## Deploying
-
+Automated deployment is handled by a single script. Simply run:
 ```bash
-firebase deploy --only hosting
+npm run release
 ```
+This script sequentially:
+1. Builds the Vite project (`dist/`).
+2. Zips the contents into `ota-updates/bundles/{version}.zip`.
+3. Deploys the new bundle to Firebase Hosting.
+4. Atomically updates the Firestore document `app_config/latest_version` with the new version metadata to trigger the OTA update on client devices.
 
-Then update the Firestore document `app_config/latest_version` with the new version info.
+## Manual Recovery
+
+If the automated script fails after deploying to Hosting, but before updating Firestore, you can manually update the `app_config/latest_version` document in the Firebase Console with the newly deployed version and URL.
