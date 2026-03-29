@@ -236,11 +236,19 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
     localStorage.setItem(PENDING_BUNDLE_ID_KEY, bundle.id);
     log.info(`Version ${remote.version} (bundle: ${bundle.id}) marked as pending in localStorage`);
 
-    // Step 3: Apply the bundle (triggers immediate app reload)
-    // NOTE: We are intentionally using .set() for immediate validation testing.
-    // For normal releases later, .next() is safer.
-    log.info(`[OTA_EVENT: set_called] Applying bundle ${bundle.id} for version ${remote.version}. Reloading...`);
-    await CapacitorUpdater.set({ id: bundle.id });
+    // Step 3: Stage the bundle for next boot, then reload cleanly.
+    //
+    // WHY next() + reload() instead of set():
+    // - set() reloads in-place inside the current WebView context.
+    //   Capgo expects a NEW notifyAppReady() call from the OTA bundle,
+    //   but our builtin App.tsx already called it. Capgo never gets the
+    //   OTA-bundle-specific notifyAppReady(), hits appReadyTimeout, and rolls back.
+    // - next() stages the bundle for the next cold boot WITHOUT reloading now.
+    //   reload() then triggers a clean restart where Capgo starts a fresh
+    //   notifyAppReady() timer BEFORE our App.tsx fires — so attribution is correct.
+    log.info(`[OTA_EVENT: set_called] Staging bundle ${bundle.id} via next(), then reloading...`);
+    await CapacitorUpdater.next({ id: bundle.id });
+    await CapacitorUpdater.reload();
   } catch (err) {
     console.error('Failed to download or apply update bundle', err);
     // Remove pending keys if we failed to call set()

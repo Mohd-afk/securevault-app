@@ -14,6 +14,9 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
 
   useEffect(() => {
+    const _bm = (k: string) => { try { const p = localStorage.getItem('OTA_DEBUG_LOG') || ''; localStorage.setItem('OTA_DEBUG_LOG', p + '\n' + k + ': ' + new Date().toISOString()); } catch(e) {} };
+    _bm('BOOT_MARK_1_react_mounted');
+    console.log('[BOOT] App component mounted, effect fires...');
     const boot = async () => {
       console.log('[BOOT] Starting boot sequence...');
 
@@ -22,11 +25,14 @@ export default function App() {
       // This MUST run before any other await. If this doesn't fire within
       // appReadyTimeout (15s), the plugin rolls back.
       // ─────────────────────────────────────────────────────────────────
+      _bm('BOOT_MARK_2_before_notifyAppReady');
       if (Capacitor.isNativePlatform()) {
         try {
           await CapacitorUpdater.notifyAppReady();
+          _bm('BOOT_MARK_3_notifyAppReady_ok');
           console.log('[BOOT] notifyAppReady() fired — bundle marked healthy');
         } catch (err) {
+          _bm('BOOT_MARK_3_notifyAppReady_FAILED: ' + String(err));
           console.error('[BOOT] notifyAppReady() failed:', err);
         }
       }
@@ -35,10 +41,13 @@ export default function App() {
       // STEP 2: Initialize Firebase.
       // Wrapped in try/catch — failure must NOT prevent render.
       // ─────────────────────────────────────────────────────────────────
+      _bm('BOOT_MARK_4_before_firebase');
       try {
         await initFirebase();
+        _bm('BOOT_MARK_5_firebase_ok');
         console.log('[BOOT] Firebase initialized');
       } catch (err) {
+        _bm('BOOT_MARK_5_firebase_FAILED: ' + String(err));
         console.error('[BOOT] Firebase init failed:', err);
         setBootError('Firebase initialization failed. Some features may be unavailable.');
         setBootComplete(true);

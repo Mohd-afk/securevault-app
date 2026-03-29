@@ -1380,11 +1380,11 @@ export function Settings() {
                             className="w-full flex items-center justify-between group"
                         >
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
-                                    <Share2 className="w-5 h-5 text-cyan-400" />
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                    <Share2 className="w-5 h-5 text-green-400" />
                                 </div>
                                 <div className="text-left">
-                                    <span className="text-white text-sm block font-medium group-hover:text-cyan-400 transition-colors">Share SecureVault</span>
+                                    <span className="text-white text-sm block font-medium group-hover:text-green-400 transition-colors">Share SecureVault</span>
                                     <span className="text-gray-400 text-xs">Invite your friends</span>
                                 </div>
                             </div>

@@ -18,6 +18,22 @@ export default defineConfig({
     },
   },
 
+  build: {
+    // ─── OTA Stability: Disable content hashing ──────────────────────
+    // Vite defaults to hashed filenames (e.g. index-A3bC4d.js).
+    // Capgo's local webserver fails to resolve these unpredictable paths,
+    // causing a silent 404 that kills the OTA bundle before React mounts.
+    // Stable, predictable filenames make Capgo's file serving bulletproof.
+    rollupOptions: {
+      output: {
+        // Force stable, non-hashed filenames for all entry and chunk files
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
+    },
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

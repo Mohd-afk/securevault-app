@@ -595,3 +595,6 @@ interface VaultItem {
 ### 14.2 Environment Awareness
 - Always verify the current working directory (`Cwd`) before running shell commands.
 - Only create project-specific rule files (like `.cursorrules`) if explicitly requested, as the team primarily uses Gemini and Claude agents.
+
+### 14.3 Android APK Building
+- **Prefer Terminal Builds:** When a native APK rebuild is required, ALWAYS prefer building it directly from the terminal using the Gradle wrapper (`cd android ; .\gradlew.bat assembleDebug`). Do not instruct the user to open Android Studio unless explicitly requested.

@@ -7,8 +7,8 @@ const config: CapacitorConfig = {
   plugins: {
     CapacitorUpdater: {
       autoUpdate: false,         // We control updates manually via updater.ts
-      appReadyTimeout: 15000,    // 15s — if notifyAppReady() not called, auto-rollback
-      resetWhenUpdate: true,     // Clear old bundles when a new update is applied
+      appReadyTimeout: 30000,    // 30s — generous timeout to account for slow first load
+      resetWhenUpdate: false,    // Do NOT clear localStorage on update — breaks our OTA debug markers and session state
     },
   },
 };

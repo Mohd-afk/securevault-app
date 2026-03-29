@@ -5,7 +5,8 @@
 // Run after `vite build`: node scripts/release-ota.mjs
 // ─────────────────────────────────────────────────────────────────────
 
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync } from 'fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync } from 'fs';
+import archiver from 'archiver';
 import { join, resolve } from 'path';
 import { execSync } from 'child_process';
 import admin from 'firebase-admin';
@@ -33,22 +34,32 @@ mkdirSync(OTA_DIR, { recursive: true });
 
 const zipPath = join(OTA_DIR, `${version}.zip`);
 
-// ─── 3. Zip the dist folder ──────────────────────────────────────────
+// ─── 3. Zip the dist folder (preserving folder structure) ───────────────
+// IMPORTANT: Do NOT use Compress-Archive on Windows — it flattens assets/
+// subdirectory contents to the zip root, causing 404s when Capgo serves the
+// bundle. Use archiver which correctly preserves all subdirectories.
 console.log(`📦 Zipping dist/ → ota-updates/bundles/${version}.zip`);
 
-try {
-  if (process.platform === 'win32') {
-    execSync(
-      `powershell -Command "Compress-Archive -Path '${DIST}\\*' -DestinationPath '${zipPath}' -Force"`,
-      { stdio: 'inherit' }
-    );
-  } else {
-    execSync(`cd "${DIST}" && zip -r "${zipPath}" .`, { stdio: 'inherit' });
-  }
-} catch (err) {
-  console.error('❌ Failed to create zip:', err.message);
-  process.exit(1);
-}
+await new Promise((resolve, reject) => {
+  const output = createWriteStream(zipPath);
+  const archive = archiver('zip', { zlib: { level: 9 } });
+
+  output.on('close', () => {
+    console.log(`   Archive size: ${(archive.pointer() / 1024 / 1024).toFixed(2)} MB`);
+    resolve();
+  });
+  archive.on('error', reject);
+  archive.pipe(output);
+
+  // Add all dist/ contents, preserving the full directory structure.
+  // Exclude PDFs and other non-web assets that inflate the bundle.
+  archive.glob('**/*', {
+    cwd: DIST,
+    ignore: ['**/*.pdf', '**/*.map'],
+  });
+
+  archive.finalize();
+});
 console.log(`✅ Bundle created: ota-updates/bundles/${version}.zip\n`);
 
 // ─── 4. Deploy to Firebase Hosting ──────────────────────────────────
