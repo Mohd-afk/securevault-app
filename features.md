@@ -622,3 +622,12 @@ Resolved critical autofill edgecases to ensure reliability across modern login f
 - **Strict Domain Trust:** Enforces a minimum domain-match confidence score of 0.8 before filling, preventing phishing attempts on spoofed subdomains.
 - **Enhanced Heuristics:** Employs a comprehensive set of international heuristic keywords and editability checks (\AutofillHelper.kt\) to detect custom form fields across apps like Instagram and Uber.
 - **Strict WebView Mapping:** Safely ignores WebView requests that don't match verified app package domains (\SecureVaultAutofillService.kt\).
+
+**OTA Update Hardening (v2.0.3)**
+Resolved persistent rollbacks and 404 errors by hardening the bundle transition and zip extraction logic:
+- **Lifecycle Protection**: Replaced `CapacitorUpdater.set()` with `next() + reload()` to ensure the OTA bundle correctly satisfies the `notifyAppReady()` requirement on a clean cold boot, preventing early session termination.
+- **Zip Structure Integrity**: Replaced the native Windows `Compress-Archive` utility (which flattened the `assets/` subdirectory) with the `archiver` npm package to preserve the required folder hierarchy.
+- **Diagnostic Trace**: Injected ultra-early `BOOT_MARK` checkpoints in `index.html` and `App.tsx` that persist in `localStorage` (`OTA_DEBUG_LOG`), enabling deep analysis of silent boot failures and rollback triggers.
+- **Predictable Asset Paths**: Disabled Vite content hashing to prevent 404 errors during OTA asset loading.
+- **Key Files**: `src/app/services/updater.ts`, `scripts/release-ota.mjs`, `capacitor.config.ts`, `vite.config.ts`.
+
