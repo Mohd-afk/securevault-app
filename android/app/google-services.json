@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1087322543080",
+    "project_id": "vault-app-ba6e2",
+    "storage_bucket": "vault-app-ba6e2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1087322543080:android:ac5e8fa1474c06f18b8a5d",
+        "android_client_info": {
+          "package_name": "com.mohdj.securevault"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1087322543080-iao9lt2p5h39p2o07kfpd35cli0on2ev.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mohdj.securevault",
+            "certificate_hash": "1bb4142bc02ef1f974a6c5368afbcccd4dc9f042"
+          }
+        },
+        {
+          "client_id": "1087322543080-ocplb6n6pqk98uig5vaiv7uve3t0br9t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBRPdDo-iZ0Ssu91zWzRwalyam3LYhvX80"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1087322543080-ocplb6n6pqk98uig5vaiv7uve3t0br9t.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

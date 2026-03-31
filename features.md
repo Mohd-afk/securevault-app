@@ -49,6 +49,7 @@ On returning visits, users sign in using their email + master password (derived 
   - Firebase `auth/quota-exceeded` graceful handling — `41b384c1`
   - `fetchSignInMethodsForEmail` replaced with Firestore hash-based lookup — conversation `3f1ccb19`
   - Google sign-in error fixes — `f9970ec6`
+  - Re-implemented Google Sign-In using native `@capacitor-firebase/authentication` to bypass Android WebView restrictions — conversation `48f94ba8`
 
 ---
 

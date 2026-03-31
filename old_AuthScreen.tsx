@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import jsPDF from 'jspdf';
 import { createLogger } from '../utils/logger';
 import {
@@ -25,7 +25,7 @@ import {
     signInWithGoogle,
 } from '../auth';
 import { deriveAuthKey } from '../crypto';
-import { hasConfiguredVault, setupInitialVault, setSessionPassword, resetVault, setPendingAutoUnlockPassword } from '../store';
+import { hasConfiguredVault, setupInitialVault, setSessionPassword, resetVault, setPendingAutoUnlockPassword, unlockWithBiometric, getSettings, checkBiometricAvailability } from '../store';
 import { checkUsernameAvailable, claimUsername, checkEmailRegistered, registerEmail } from '../firestore';
 import { getCurrentUser } from '../auth';
 
@@ -36,7 +36,7 @@ import { getRateLimitState, recordFailedAttempt, clearRateLimit, forceHardLockou
 
 const log = createLogger('UI');
 
-// ── Component ────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Component ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 interface AuthScreenProps {
     onAuthenticated: () => void;
@@ -56,7 +56,44 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [lockoutSecs, setLockoutSecs] = useState<number>(0);
 
-    // ── Username state ─────────────────────────────────────────────────
+    const [biometricEnabled, setBiometricEnabled] = useState(false);
+
+    useEffect(() => {
+        const checkBiometric = async () => {
+            try {
+                const settings = await getSettings();
+                if (settings.biometricEnabled) {
+                    const res = await checkBiometricAvailability();
+                    if (res.available) {
+                        setBiometricEnabled(true);
+                    }
+                }
+            } catch (e) {
+                log.warn('Failed to check biometric config', e);
+            }
+        };
+        checkBiometric();
+    }, []);
+
+    const handleBiometricUnlock = async () => {
+        try {
+            setError('');
+            setLoading(true);
+            const success = await unlockWithBiometric();
+            if (success) {
+                onAuthenticated();
+            }
+        } catch (e: any) {
+            log.warn('Biometric unlock failed or dismissed', e);
+            if (!String(e).includes('ERROR_10') && !String(e).includes('ERROR_13')) { 
+                setError('Biometric authentication failed. Please enter your Master Password.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ΓöÇΓöÇ Username state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [username, setUsername] = useState('');
     const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
     const usernameCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,7 +129,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         }, 400);
     }, []);
 
-    // ── Rate Limit UI Timer ───────────────────────────────────────────
+    // ΓöÇΓöÇ Rate Limit UI Timer ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     useEffect(() => {
         let timer: ReturnType<typeof setInterval>;
         if (lockoutSecs > 0) {
@@ -119,7 +156,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         }
     }, [email, mode]);
 
-    // ── On Mount: Check Magic Link ────────────────────────────────────
+    // ΓöÇΓöÇ On Mount: Check Magic Link ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     useEffect(() => {
         const checkMagicLink = async () => {
             if (isVerificationLink(window.location.href)) {
@@ -153,7 +190,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         checkMagicLink();
     }, []);
 
-    // ── Email Login ───────────────────────────────────────────────
+    // ΓöÇΓöÇ Email Login ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -205,7 +242,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         setLoading(false);
     };
 
-    // ── Request Magic Link (Sign up or Forgot) ────────────────────
+    // ΓöÇΓöÇ Request Magic Link (Sign up or Forgot) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const handleRequestLink = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -257,8 +294,53 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         setLoading(false);
     };
 
+    // ΓöÇΓöÇ Google Sign-In ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    const handleGoogleSignIn = async () => {
+        setError('');
+        setGoogleLoading(true);
 
-    // ── Generate Dynamic PDF ─────────────────────────────────────────
+        // Safety timeout: if popup hangs or user closes it, reset after 10s
+        const safetyTimeout = setTimeout(() => {
+            setGoogleLoading(false);
+        }, 10_000);
+
+        try {
+            const user = await signInWithGoogle();
+            clearTimeout(safetyTimeout);
+            log.info('Google sign-in completed', { uid: user.uid, email: user.email });
+            setEmail(user.email ?? '');
+
+            // Check if this Google user already has a vault
+            const hasVault = await hasConfiguredVault();
+
+            if (hasVault) {
+                // Returning user ΓÇö they already set up a vault before.
+                // Ensure email hash is registered (catch-all for old accounts)
+                try { if (user.email) await registerEmail(user.email); } catch (_e) { /* non-critical */ }
+                onAuthenticated();
+            } else {
+                // New user ΓÇö needs to create a master password for encryption.
+                setMode('setup_master');
+            }
+        } catch (err: unknown) {
+            clearTimeout(safetyTimeout);
+            const message = err instanceof Error ? err.message : '';
+            if (message.includes('auth/popup-closed-by-user')) {
+                // User closed the popup, not an error
+            } else if (message.includes('auth/cancelled-popup-request')) {
+                // Duplicate popup, ignore
+            } else {
+                setError('Google sign-in failed. Please try again.');
+            }
+        }
+        setGoogleLoading(false);
+    };
+
+    const cancelGoogleSignIn = () => {
+        setGoogleLoading(false);
+    };
+
+    // ΓöÇΓöÇ Generate Dynamic PDF ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const handleDownloadPDF = () => {
         if (!password) return;
 
@@ -300,7 +382,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         doc.save("SecureVault_Emergency_Kit.pdf");
     };
 
-    // ── Master Password Setup (Flow 1 & 3) ────────────────────────
+    // ΓöÇΓöÇ Master Password Setup (Flow 1 & 3) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const handleSetupMaster = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -371,53 +453,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     };
 
 
-    // ── Google Sign-In ───────────────────────────────────────────────────
-    const handleGoogleSignIn = async () => {
-        setError('');
-        setGoogleLoading(true);
-
-        // Safety timeout: if popup hangs or user closes it, reset after 10s
-        const safetyTimeout = setTimeout(() => {
-            setGoogleLoading(false);
-        }, 10_000);
-
-        try {
-            const user = await signInWithGoogle();
-            clearTimeout(safetyTimeout);
-            log.info('Google sign-in completed', { uid: user.uid, email: user.email });
-            setEmail(user.email ?? '');
-
-            // Check if this Google user already has a vault
-            const hasVault = await hasConfiguredVault();
-
-            if (hasVault) {
-                // Returning user — they already set up a vault before.
-                // Ensure email hash is registered (catch-all for old accounts)
-                try { if (user.email) await registerEmail(user.email); } catch (_e) { /* non-critical */ }
-                onAuthenticated();
-            } else {
-                // New user — needs to create a master password for encryption.
-                setMode('setup_master');
-            }
-        } catch (err: unknown) {
-            clearTimeout(safetyTimeout);
-            const message = err instanceof Error ? err.message : '';
-            if (message.includes('auth/popup-closed-by-user')) {
-                // User closed the popup, not an error
-            } else if (message.includes('auth/cancelled-popup-request')) {
-                // Duplicate popup, ignore
-            } else {
-                setError('Google sign-in failed. Please try again.');
-            }
-        }
-        setGoogleLoading(false);
-    };
-
-    const cancelGoogleSignIn = () => {
-        setGoogleLoading(false);
-    };
-
-    // ── Processing Link Screen ───────────────────────────────────────
+    // ΓöÇΓöÇ Processing Link Screen ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     if (mode === 'processing_link') {
         return (
             <div className="min-h-screen bg-[#1a1a2e] flex flex-col items-center justify-center px-6">
@@ -427,7 +463,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         );
     }
 
-    // ── Verify Email Screen ──────────────────────────────────────────
+    // ΓöÇΓöÇ Verify Email Screen ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     if (mode === 'verify') {
         return (
             <div className="min-h-screen bg-[#1a1a2e] flex flex-col items-center justify-center px-6">
@@ -459,7 +495,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                             }}
                             className="text-gray-500 text-xs hover:text-gray-300 transition-colors mt-6 pt-4 border-t border-gray-700/50 w-full inline-block"
                         >
-                            ← Back to Sign In
+                            ΓåÉ Back to Sign In
                         </button>
                     </div>
                 </div>
@@ -467,7 +503,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         );
     }
 
-    // ── Set up Master Password Screen ───────────────────────────────
+    // ΓöÇΓöÇ Set up Master Password Screen ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     if (mode === 'setup_master') {
         return (
             <div className="min-h-[100dvh] bg-[#1a1a2e] flex flex-col items-center justify-center px-6">
@@ -478,7 +514,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                         </div>
                         <h1 className="text-white text-xl mb-1">{isResetFlow ? 'Reset Master Password' : 'Create Master Password'}</h1>
                         <p className="text-gray-400 text-xs text-center mt-2 max-w-[280px]">
-                            Your Master Password is never stored anywhere. If you forget it, your vault cannot be recovered by anyone — not even us.
+                            Your Master Password is never stored anywhere. If you forget it, your vault cannot be recovered by anyone ΓÇö not even us.
                         </p>
                     </div>
 
@@ -552,7 +588,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                             </div>
                         </div>
 
-                        {/* Username field — only for new signups */}
+                        {/* Username field ΓÇö only for new signups */}
                         {!isResetFlow && (
                             <div>
                                 <label className="text-gray-400 text-xs mb-1.5 block">Choose a Username</label>
@@ -585,10 +621,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                                         <p className="text-red-400">Must be 3-20 characters. Only lowercase letters, numbers, and underscores.</p>
                                     )}
                                     {usernameStatus === 'available' && (
-                                        <p className="text-emerald-400">✓ Username is available!</p>
+                                        <p className="text-emerald-400">Γ£ô Username is available!</p>
                                     )}
                                     {usernameStatus === 'taken' && (
-                                        <p className="text-red-400">✗ Username is already taken.</p>
+                                        <p className="text-red-400">Γ£ù Username is already taken.</p>
                                     )}
                                     {usernameStatus === 'checking' && (
                                         <p className="text-gray-400">Checking availability...</p>
@@ -644,7 +680,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         )
     }
 
-    // ── Sign In / Request Link Screen ─────────────────────────────────────
+    // ΓöÇΓöÇ Sign In / Request Link Screen ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const isLogin = mode === 'signin';
     const isSignup = mode === 'signup';
 
@@ -721,12 +757,24 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                                 onClick={() => { setMode('signin'); setError(''); }}
                                 className="text-cyan-400 text-sm mt-1 hover:underline"
                             >
-                                Sign In instead →
+                                Sign In instead ΓåÆ
                             </button>
                         </div>
                     )}
 
                     <div className="flex flex-col gap-3 mt-4">
+                        {isLogin && biometricEnabled && lockoutSecs === 0 && (
+                            <button
+                                type="button"
+                                onClick={handleBiometricUnlock}
+                                disabled={loading || !email}
+                                className="w-full bg-[#16213e] hover:bg-[#1a2942] border border-emerald-500/30 text-emerald-400 py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                            >
+                                <Shield className="w-4 h-4" />
+                                Unlock with Biometrics
+                            </button>
+                        )}
+                        
                         <button
                             type="submit"
                             disabled={loading || !email || (isLogin && !password) || lockoutSecs > 0 || (isSignup && !agreedToTerms)}
@@ -751,37 +799,34 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                         <span className="text-gray-500 text-xs">or</span>
                         <div className="flex-1 h-px bg-gray-700/50" />
                     </div>
-
                     <button
-                        type="button"
-                        onClick={googleLoading ? cancelGoogleSignIn : handleGoogleSignIn}
-                        disabled={loading}
-                        className="w-full bg-[#16213e] hover:bg-[#1a2942] border border-gray-700 text-white py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                        onClick={handleGoogleSignIn}
+                        disabled={loading || googleLoading}
+                        className="w-full flex items-center justify-center gap-3 bg-[#16213e] border border-gray-700/50 text-white py-3 rounded-xl hover:bg-white/5 active:scale-[0.98] transition-all disabled:opacity-50"
                     >
                         {googleLoading ? (
-                            <>
-                                <RefreshCw className="w-4 h-4 animate-spin text-gray-400" />
-                                <span>Cancel wait...</span>
-                            </>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
                         ) : (
-                            <>
-                                <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                                    <path d="M1 1h22v22H1z" fill="none" />
-                                </svg>
-                                <span>Continue with Google</span>
-                            </>
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                            </svg>
                         )}
+                        {googleLoading ? 'Waiting for Google...' : 'Continue with Google'}
                     </button>
-                    {googleLoading && <p className="text-gray-500 text-[10px] items-center text-center mt-3 max-w-[260px]">If the prompt fails to open properly, you can try closing the prompt if it is open, and click cancel above then retry.</p>}
+                    {googleLoading && (
+                        <button
+                            onClick={cancelGoogleSignIn}
+                            className="text-gray-500 text-xs hover:text-gray-300 transition-colors mt-2"
+                        >
+                            Cancel
+                        </button>
+                    )}
                 </div>
 
-
-
-                {/* Terms consent — signup only */}
+                {/* Terms consent ΓÇö signup only */}
                 {isSignup && (
                     <label className="flex items-start gap-3 mt-4 cursor-pointer group">
                         <div className="relative flex items-center justify-center mt-0.5 shrink-0">

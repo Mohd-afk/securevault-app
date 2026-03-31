@@ -1,6 +1,6 @@
 // ─── SecureVault Auth Module ─────────────────────────────────────────
 // Wraps Firebase Auth for email logic (passwordless + derived keys).
-// Google Sign-In is removed — incompatible with Capacitor WebView.
+// Contains native Capacitor Google Sign-In support.
 //
 // NOTE: All functions call getFirebaseAuth() lazily each time.
 // This ensures Firebase is always initialized before use.
@@ -17,8 +17,11 @@ import {
     EmailAuthProvider,
     reauthenticateWithCredential,
     linkWithCredential,
+    GoogleAuthProvider,
+    signInWithCredential,
     type User,
 } from 'firebase/auth';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { getFirebaseAuth } from './firebase';
 import { createLogger } from './utils/logger';
 
@@ -107,6 +110,28 @@ export async function signInWithDerivedKey(
     const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, authKey);
     log.info('Sign-in with derived key successful', { uid: credential.user.uid });
     return credential.user;
+}
+
+// ── Google Sign-In ───────────────────────────────────────────────────
+
+export async function signInWithGoogle(): Promise<User> {
+    log.info('Starting Native Google sign-in');
+    
+    // Call the native Google Sign-In plugin
+    const result = await FirebaseAuthentication.signInWithGoogle();
+    
+    // Convert the native Google credential to a Firebase credential
+    // The plugin returns idToken (Google token)
+    if (!result.credential || !result.credential.idToken) {
+        throw new Error("Google Sign-In failed to return an ID token");
+    }
+    
+    // Link to our JS SDK
+    const credential = GoogleAuthProvider.credential(result.credential.idToken);
+    const authResult = await signInWithCredential(getFirebaseAuth(), credential);
+    
+    log.info('Google sign-in successful', { uid: authResult.user.uid, email: authResult.user.email });
+    return authResult.user;
 }
 
 // ── Sign Out ─────────────────────────────────────────────────────────
