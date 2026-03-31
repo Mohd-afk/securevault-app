@@ -24,7 +24,7 @@ import {
     signInWithDerivedKey,
 } from '../auth';
 import { deriveAuthKey } from '../crypto';
-import { hasConfiguredVault, setupInitialVault, setSessionPassword, resetVault, setPendingAutoUnlockPassword, unlockWithBiometric, getSettings, checkBiometricAvailability } from '../store';
+import { hasConfiguredVault, setupInitialVault, setSessionPassword, resetVault, setPendingAutoUnlockPassword } from '../store';
 import { checkUsernameAvailable, claimUsername, checkEmailRegistered, registerEmail } from '../firestore';
 import { getCurrentUser } from '../auth';
 
@@ -49,48 +49,11 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const [googleLoading, setGoogleLoading] = useState(false);
     const [isResetFlow, setIsResetFlow] = useState(false);
     const [hasAcknowledged, setHasAcknowledged] = useState(false);
     const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [lockoutSecs, setLockoutSecs] = useState<number>(0);
 
-    const [biometricEnabled, setBiometricEnabled] = useState(false);
-
-    useEffect(() => {
-        const checkBiometric = async () => {
-            try {
-                const settings = await getSettings();
-                if (settings.biometricEnabled) {
-                    const res = await checkBiometricAvailability();
-                    if (res.available) {
-                        setBiometricEnabled(true);
-                    }
-                }
-            } catch (e) {
-                log.warn('Failed to check biometric config', e);
-            }
-        };
-        checkBiometric();
-    }, []);
-
-    const handleBiometricUnlock = async () => {
-        try {
-            setError('');
-            setLoading(true);
-            const success = await unlockWithBiometric();
-            if (success) {
-                onAuthenticated();
-            }
-        } catch (e: any) {
-            log.warn('Biometric unlock failed or dismissed', e);
-            if (!String(e).includes('ERROR_10') && !String(e).includes('ERROR_13')) { 
-                setError('Biometric authentication failed. Please enter your Master Password.');
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
 
     // ── Username state ─────────────────────────────────────────────────
     const [username, setUsername] = useState('');
@@ -717,17 +680,6 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     )}
 
                     <div className="flex flex-col gap-3 mt-4">
-                        {isLogin && biometricEnabled && lockoutSecs === 0 && (
-                            <button
-                                type="button"
-                                onClick={handleBiometricUnlock}
-                                disabled={loading || !email}
-                                className="w-full bg-[#16213e] hover:bg-[#1a2942] border border-emerald-500/30 text-emerald-400 py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                            >
-                                <Shield className="w-4 h-4" />
-                                Unlock with Biometrics
-                            </button>
-                        )}
                         
                         <button
                             type="submit"

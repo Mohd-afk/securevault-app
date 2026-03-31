@@ -85,6 +85,20 @@ let _vaultChangeListeners: Array<(items: VaultItem[]) => void> = [];
 let _lastWriteTimestamp = 0;
 const SYNC_SUPPRESS_WINDOW_MS = 3000; // 3-second window to ignore echo-back
 
+// ── AUTHORITATIVE UNLOCK CHECK ───────────────────────────────────────
+// _sessionCryptoKey is the ONLY source of truth for "is the vault unlocked".
+// _sessionPassword is a convenience value only (used to derive the key on
+// password-based unlock). Its absence does NOT mean the vault is locked —
+// biometric unlock sets _sessionCryptoKey directly without setting _sessionPassword.
+function isVaultUnlocked(): boolean {
+  return !!_sessionCryptoKey;
+}
+
+// Export for components that need to check lock state (e.g. LockScreen).
+export function getIsVaultUnlocked(): boolean {
+  return isVaultUnlocked();
+}
+
 export function setSessionPassword(password: string): void {
   log.info('Session password set');
   _sessionPassword = password;
@@ -314,13 +328,18 @@ async function saveVaultToStorage(items: VaultItem[], password: string): Promise
 // ── Cloud-synced save ────────────────────────────────────────────────
 
 async function saveVaultEverywhere(items: VaultItem[], password: string): Promise<void> {
+  // SECURITY: Must have an active crypto key. Never silently encrypt with empty/null key.
+  if (!_sessionCryptoKey) {
+    throw new Error('SECURITY: No encryption context. Vault save aborted.');
+  }
+
   const email = getUserEmail();
   if (!email) {
     log.warn('saveVaultEverywhere: no email — skipping');
     return;
   }
 
-  const key = _sessionCryptoKey || await deriveEncryptionKey(password, email);
+  const key = _sessionCryptoKey;
   const plaintext = JSON.stringify(items);
   const payload = await encryptWithKey(plaintext, key);
   const uid = getUid(); // Get UID here for logging
@@ -406,6 +425,17 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
   }
 
   _sessionPassword = password;
+  // Derive and cache the CryptoKey as the authoritative unlock signal.
+  // isVaultUnlocked() reads _sessionCryptoKey — set it here after successful decryption.
+  const email2 = getUserEmail();
+  if (email2 && password) {
+    try {
+      _sessionCryptoKey = await deriveEncryptionKey(password, email2);
+    } catch (e) {
+      log.error('unlockVault: failed to cache session crypto key', e);
+      throw e;
+    }
+  }
   _cachedItems = items;
 
   // Start real-time sync listener
@@ -490,7 +520,7 @@ export function getVaultItem(id: string): VaultItem | undefined {
 export async function addVaultItem(
   item: Omit<VaultItem, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<VaultItem> {
-  if (!_sessionPassword) throw new Error('Vault is locked');
+  if (!isVaultUnlocked()) throw new Error('Vault is locked'); // uses _sessionCryptoKey as truth
 
   const items = getVaultItems();
   const now = new Date().toISOString();
@@ -503,7 +533,7 @@ export async function addVaultItem(
   items.push(newItem);
   _cachedItems = [...items];
   log.info('Adding vault item', { id: newItem.id, title: newItem.title });
-  await saveVaultEverywhere(items, _sessionPassword);
+  await saveVaultEverywhere(items, _sessionPassword ?? '');
   return newItem;
 }
 
@@ -511,7 +541,7 @@ export async function updateVaultItem(
   id: string,
   updates: Partial<Omit<VaultItem, 'id' | 'createdAt'>>,
 ): Promise<VaultItem | null> {
-  if (!_sessionPassword) throw new Error('Vault is locked');
+  if (!isVaultUnlocked()) throw new Error('Vault is locked'); // uses _sessionCryptoKey as truth
 
   const items = getVaultItems();
   const index = items.findIndex((i) => i.id === id);
@@ -527,12 +557,12 @@ export async function updateVaultItem(
   };
   _cachedItems = [...items];
   log.info('Updated vault item', { id });
-  await saveVaultEverywhere(items, _sessionPassword);
+  await saveVaultEverywhere(items, _sessionPassword ?? '');
   return items[index];
 }
 
 export async function deleteVaultItem(id: string): Promise<void> {
-  if (!_sessionPassword) throw new Error('Vault is locked');
+  if (!isVaultUnlocked()) throw new Error('Vault is locked'); // uses _sessionCryptoKey as truth
 
   const items = getVaultItems();
   const index = items.findIndex((i) => i.id === id);
@@ -548,20 +578,20 @@ export async function deleteVaultItem(id: string): Promise<void> {
   };
   _cachedItems = [...items];
   log.info('Soft-deleted vault item (moved to trash)', { id });
-  await saveVaultEverywhere(items, _sessionPassword);
+  await saveVaultEverywhere(items, _sessionPassword ?? '');
 }
 
 export async function permanentlyDeleteVaultItem(id: string): Promise<void> {
-  if (!_sessionPassword) throw new Error('Vault is locked');
+  if (!isVaultUnlocked()) throw new Error('Vault is locked'); // uses _sessionCryptoKey as truth
 
   const items = getVaultItems().filter((i) => i.id !== id);
   _cachedItems = items;
   log.info('Permanently deleted vault item', { id });
-  await saveVaultEverywhere(items, _sessionPassword);
+  await saveVaultEverywhere(items, _sessionPassword ?? '');
 }
 
 export async function restoreVaultItem(id: string): Promise<void> {
-  if (!_sessionPassword) throw new Error('Vault is locked');
+  if (!isVaultUnlocked()) throw new Error('Vault is locked'); // uses _sessionCryptoKey as truth
 
   const items = getVaultItems();
   const index = items.findIndex((i) => i.id === id);
@@ -577,7 +607,7 @@ export async function restoreVaultItem(id: string): Promise<void> {
   };
   _cachedItems = [...items];
   log.info('Restored vault item from trash', { id });
-  await saveVaultEverywhere(items, _sessionPassword);
+  await saveVaultEverywhere(items, _sessionPassword ?? '');
 }
 
 // ── Bulk add (for CSV import) ────────────────────────────────────────
@@ -585,7 +615,7 @@ export async function restoreVaultItem(id: string): Promise<void> {
 export async function bulkAddVaultItems(
   newItems: Omit<VaultItem, 'id' | 'createdAt' | 'updatedAt'>[],
 ): Promise<number> {
-  if (!_sessionPassword) throw new Error('Vault is locked');
+  if (!isVaultUnlocked()) throw new Error('Vault is locked'); // uses _sessionCryptoKey as truth
 
   const items = getVaultItems();
   const now = new Date().toISOString();
@@ -600,7 +630,7 @@ export async function bulkAddVaultItems(
   items.push(...created);
   _cachedItems = [...items];
   log.info('Bulk-added vault items', { count: created.length });
-  await saveVaultEverywhere(items, _sessionPassword);
+  await saveVaultEverywhere(items, _sessionPassword ?? '');
   return created.length;
 }
 
@@ -611,7 +641,7 @@ export async function bulkAddVaultItems(
  * Should be called on vault unlock.
  */
 export async function purgeExpiredTrashItems(): Promise<number> {
-  if (!_sessionPassword) return 0;
+  if (!isVaultUnlocked()) return 0; // uses _sessionCryptoKey as truth
 
   const items = getVaultItems();
   const now = Date.now();
@@ -629,7 +659,7 @@ export async function purgeExpiredTrashItems(): Promise<number> {
 
   _cachedItems = remaining;
   log.info('Purging expired trash items', { expiredCount: expired.length, remainingCount: remaining.length });
-  await saveVaultEverywhere(remaining, _sessionPassword);
+  await saveVaultEverywhere(remaining, _sessionPassword ?? '');
   return expired.length;
 }
 
@@ -798,8 +828,8 @@ export async function changeMasterPassword(
 
 export async function migrateLocalToCloud(): Promise<void> {
   const uid = getUid();
-  if (!uid || !_sessionPassword) {
-    log.warn('migrateLocalToCloud: no uid or session password');
+  if (!uid || !isVaultUnlocked()) {
+    log.warn('migrateLocalToCloud: no uid or vault not unlocked');
     return;
   }
 
@@ -810,7 +840,7 @@ export async function migrateLocalToCloud(): Promise<void> {
   }
 
   log.info('Migrating local vault data to cloud', { uid, itemCount: items.length });
-  await saveVaultEverywhere(items, _sessionPassword);
+  await saveVaultEverywhere(items, _sessionPassword ?? '');
 
   const settings = await getSettings();
   await saveSettingsToCloud(uid, settings).catch((e) => {
@@ -868,7 +898,7 @@ async function syncToNativeVault(items: VaultItem[]): Promise<void> {
 }
 
 async function checkAndMergeAutofillItems(): Promise<void> {
-  if (!_sessionPassword) return;
+  if (!isVaultUnlocked()) return; // uses _sessionCryptoKey as truth
   try {
     const nativeData = await VaultBridge.getItems();
     const nativeItems = nativeData?.items || [];
@@ -893,7 +923,7 @@ async function checkAndMergeAutofillItems(): Promise<void> {
       
       const mergedItems = [...items, ...formattedItems];
       _cachedItems = mergedItems;
-      await saveVaultEverywhere(mergedItems, _sessionPassword);
+      await saveVaultEverywhere(mergedItems, _sessionPassword ?? '');
     }
   } catch (e) {
     log.debug('Background reverse sync check failed', e);
@@ -903,7 +933,7 @@ async function checkAndMergeAutofillItems(): Promise<void> {
 // Ensure the App listener is only added once
 try {
   App.addListener('appStateChange', async ({ isActive }) => {
-    if (isActive && _sessionPassword) {
+    if (isActive && isVaultUnlocked()) {
       await checkAndMergeAutofillItems();
     }
   });
