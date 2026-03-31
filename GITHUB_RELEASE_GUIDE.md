@@ -113,13 +113,15 @@ apk_download_url: "https://github.com/Mohd-afk/securevault-app/releases/latest"
 
 ## APK Version Numbering
 
-| Release | Tag | `min_apk_version` in Firestore | Notes |
-|---|---|---|---|
-| First release | v1 | 1 | Initial APK |
-| Google Sign-In (native) | v2 | 2 | Added `@capacitor-firebase/authentication` |
-| v3 and beyond | v3 | 3 | Future native changes |
+| Release | Tag | `versionCode` in build.gradle | `min_apk_version` in Firestore | Notes |
+|---|---|---|---|---|
+| First release | v1 | 1 | 1 | Initial APK |
+| Google Sign-In (native) | v2 | 2 | 2 | Added `@capacitor-firebase/authentication` |
+| v3 and beyond | v3 | 3 | 3 | Future native changes |
 
-> **Rule:** The integer only ever goes up. Never decrease `min_apk_version`.
+> **Critical Rule:** `versionCode` in `build.gradle`, the GitHub tag integer, and `min_apk_version` in Firestore **must always be the same integer**. This is how the app knows the installed APK meets the minimum requirement.
+>
+> **Before every APK release:** bump `versionCode` and `versionName` in `android/app/build.gradle` first, THEN build, THEN set `min_apk_version` to match.
 
 ---
 
