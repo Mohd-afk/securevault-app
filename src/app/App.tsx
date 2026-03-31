@@ -6,12 +6,16 @@ import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { router } from './routes';
 import { initFirebase } from './firebase';
 import { initUpdater } from './services/updater';
+import { checkApkUpdateRequired } from './services/apk-update-checker';
 import CriticalUpdateScreen from './components/CriticalUpdateScreen';
+import ApkUpdateBanner from './components/ApkUpdateBanner';
 
 export default function App() {
   const [criticalUpdate, setCriticalUpdate] = useState(false);
   const [bootComplete, setBootComplete] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
+  const [apkUpdateRequired, setApkUpdateRequired] = useState(false);
+  const [apkDownloadUrl, setApkDownloadUrl] = useState('https://github.com/Mohd-afk/securevault-app/releases/latest');
 
   useEffect(() => {
     const _bm = (k: string) => { try { const p = localStorage.getItem('OTA_DEBUG_LOG') || ''; localStorage.setItem('OTA_DEBUG_LOG', p + '\n' + k + ': ' + new Date().toISOString()); } catch(e) {} };
@@ -55,13 +59,28 @@ export default function App() {
       }
 
       // ─────────────────────────────────────────────────────────────────
-      // STEP 3: Check for OTA updates (non-blocking).
+      // STEP 3: APK version check + OTA check (run in parallel, non-blocking).
+      // APK check determines if the native binary itself needs updating.
+      // OTA check handles silent JS/UI-only updates via Capgo.
       // ─────────────────────────────────────────────────────────────────
-      try {
-        await initUpdater({ onCriticalUpdate: () => setCriticalUpdate(true) });
-        console.log('[BOOT] OTA check complete');
-      } catch (err) {
-        console.error('[BOOT] OTA check failed (non-fatal):', err);
+      const [apkResult] = await Promise.allSettled([
+        // 3a: APK version check
+        checkApkUpdateRequired().then(result => {
+          console.log('[APK_UPDATE] Check result:', result);
+          if (result.updateRequired) {
+            setApkUpdateRequired(true);
+            if (result.downloadUrl) setApkDownloadUrl(result.downloadUrl);
+          }
+          return result;
+        }),
+        // 3b: OTA Capgo update check
+        initUpdater({ onCriticalUpdate: () => setCriticalUpdate(true) })
+          .then(() => console.log('[BOOT] OTA check complete'))
+          .catch(err => console.error('[BOOT] OTA check failed (non-fatal):', err)),
+      ]);
+
+      if (apkResult.status === 'rejected') {
+        console.error('[BOOT] APK update check failed (non-fatal):', apkResult.reason);
       }
 
       setBootComplete(true);
@@ -98,6 +117,11 @@ export default function App() {
       </div>
     );
   }
+
+  // APK update required — show full-screen blocker BEFORE routing.
+  // This must sit above criticalUpdate in priority because a missing native
+  // plugin can cause the OTA critical-update flow to also fail.
+  if (apkUpdateRequired) return <ApkUpdateBanner downloadUrl={apkDownloadUrl} />;
 
   if (criticalUpdate) return <CriticalUpdateScreen />;
 

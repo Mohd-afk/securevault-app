@@ -92,13 +92,15 @@ try {
   });
 
   const db = admin.firestore();
+  // Use merge: true so we never overwrite min_apk_version or apk_download_url
+  // (those fields are only set when publishing a new native APK release)
   await db.collection('app_config').doc('latest_version').set({
     version: version,
     url: `https://vault-app-ba6e2.web.app/bundles/${version}.zip`,
     critical: false,
     releaseNotes: `Automated release ${version}`,
     releasedAt: new Date().toISOString()
-  });
+  }, { merge: true });
   
   console.log(`✅ Firestore successfully updated to version ${version}`);
 } catch (err) {

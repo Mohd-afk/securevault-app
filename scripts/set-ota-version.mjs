@@ -20,11 +20,13 @@ const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(
 
 const body = {
   fields: {
-    version:      { stringValue:  '0.0.9' },
-    url:          { stringValue:  `https://${PROJECT}.web.app/bundles/0.0.9.zip` },
-    critical:     { booleanValue: false }, // Set to true if this is a mandatory security update
-    releaseNotes: { stringValue:  'Critical fixes for OTA updates: Fixed Native Bridge Error and Infinite Reload traps.' },
-    releasedAt:   { stringValue:  new Date().toISOString() },
+    version:         { stringValue:  '2.0.5' },
+    url:             { stringValue:  `https://${PROJECT}.web.app/bundles/2.0.5.zip` },
+    critical:        { booleanValue: false },
+    releaseNotes:    { stringValue:  'GitHub Release workflow + in-app APK update banner (v2.0.5)' },
+    releasedAt:      { stringValue:  new Date().toISOString() },
+    min_apk_version: { integerValue: '2' },
+    apk_download_url:{ stringValue:  'https://github.com/Mohd-afk/securevault-app/releases/latest' },
   }
 };
 
