@@ -635,3 +635,13 @@ Resolved persistent rollbacks and 404 errors by hardening the bundle transition 
 - **Predictable Asset Paths**: Disabled Vite content hashing to prevent 404 errors during OTA asset loading.
 - **Key Files**: `src/app/services/updater.ts`, `scripts/release-ota.mjs`, `capacitor.config.ts`, `vite.config.ts`.
 
+---
+
+**Native Google OAuth Integration (v2.0.4)**
+Migrated Google Sign-In from web `signInWithPopup` to a native Capacitor implementation to ensure compatibility across all Android environments:
+- **Native Implementation**: Uses `@capacitor-firebase/authentication` to handle the OAuth flow natively, bypassing WebView popup restrictions.
+- **Firebase Configuration**: Integrated `google-services.json` directly into the Android source, enabling standard Google Play Services authentication.
+- **Credential Handover**: The native `idToken` is securely passed to the JS SDK via `signInWithCredential()`, maintaining full compatibility with existing Firestore security rules and user data mapping.
+- **APK Requirement**: This update **requires a new native APK build** as it introduces new native plugins and resource files that cannot be delivered via OTA updates.
+- **Key Files**: `src/app/auth.ts`, `src/app/components/AuthScreen.tsx`, `android/app/google-services.json`.
+
