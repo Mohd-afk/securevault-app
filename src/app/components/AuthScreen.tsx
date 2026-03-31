@@ -49,11 +49,11 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const [isResetFlow, setIsResetFlow] = useState(false);
     const [hasAcknowledged, setHasAcknowledged] = useState(false);
     const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [lockoutSecs, setLockoutSecs] = useState<number>(0);
-
 
     // ── Username state ─────────────────────────────────────────────────
     const [username, setUsername] = useState('');
@@ -680,7 +680,6 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     )}
 
                     <div className="flex flex-col gap-3 mt-4">
-                        
                         <button
                             type="submit"
                             disabled={loading || !email || (isLogin && !password) || lockoutSecs > 0 || (isSignup && !agreedToTerms)}

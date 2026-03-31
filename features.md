@@ -243,19 +243,17 @@ Displayed in Settings under a "Legal" section. A consent checkbox was added to t
 
 **Description:** Native biometric authentication (Fingerprint/Face Unlock) on Android that allows users to unlock their vault without typing the master password. Features:
 - Enabled via Settings (requires confirming Master Password).
-- Auto-prompts the biometric dialog on LockScreen mount (not AuthScreen — biometric does not perform Firebase auth).
-- Falls back to a manual "Unlock with Biometrics" button if the user cancels the auto-prompt.
-- Secure implementation: The master password is never stored. Instead, the Data Encryption Key (DEK) is securely wrapped by the Android Keystore. `unlockWithBiometric()` sets `_sessionCryptoKey` directly — the authoritative vault unlock signal.
+- **Auto-Prompt Flow:** The Lock Screen automatically prompts for biometric authentication on mount if enabled.
+- **Manual Fallback:** If biometric authentication is cancelled or fails, it falls back to the master password input and displays an "Unlock with Biometrics" button.
+- Secure implementation: The master password is never stored. Instead, the Data Encryption Key (DEK) is securely wrapped by the Android Keystore.
 - Automatically disables functionality if the device is rooted or if new biometric data (enrollments) are added to the device OS.
 
 - **Introduced:** conversation `5ef446b0` (2026-03-16)
-- **Key Files:** `LockScreen.tsx`, `Settings.tsx`, `BiometricBridgePlugin.kt`, `store.ts` (`unlockWithBiometric`, `enableBiometricUnlock`)
+- **Key Files:** `LockScreen.tsx`, `Settings.tsx`, `store.ts`, `BiometricBridgePlugin.kt`
 - **Later Changes:**
-  - **Security fix (2026-03-31):** Moved biometric unlock from `AuthScreen.tsx` to `LockScreen.tsx`. Biometric decrypts the vault DEK only — it has no Firebase auth involvement. Placing it on `AuthScreen` caused a redirect loop (vault unlocked but Firebase session missing). Now on `LockScreen` where the vault gate lives.
-  - **Single source of truth:** `_sessionCryptoKey` (not `_sessionPassword`) is now the only signal checked by `isVaultUnlocked()`. All vault operations and the `saveVaultEverywhere` function guard against a null key — an explicit error is thrown instead of silently using an empty-string key.
+  - Migrated logic from `AuthScreen.tsx` to `LockScreen.tsx`, introduced auto-prompt, and hardened state management using single source of truth (`isVaultUnlocked()`) — conversation `48f94ba8`
 
 ---
-
 
 ### 1.18 In-App Feedback Form
 
