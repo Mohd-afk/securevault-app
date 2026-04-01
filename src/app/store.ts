@@ -104,13 +104,17 @@ export function clearSession(): void {
 }
 
 /**
- * Clear all IndexedDB vault data.
- * Called on sign-out to prevent stale data from leaking to the next user.
+ * Clear local vault item data from IndexedDB.
+ * Called on sign-out to prevent stale vault items from leaking to the next user.
+ *
+ * NOTE: We intentionally do NOT delete SETTINGS_KEY here. Settings contain
+ * device-level preferences (biometricEnabled, autoLockTimeout, etc.) that
+ * should survive a logout so the user doesn't have to reconfigure them on
+ * every sign-in on the same device.
  */
 export async function clearLocalVaultData(): Promise<void> {
-  log.info('Clearing local vault data from IndexedDB');
+  log.info('Clearing local vault data from IndexedDB (settings preserved)');
   await idbDelete(VAULT_KEY);
-  await idbDelete(SETTINGS_KEY);
 }
 
 export function getSessionPassword(): string | null {
