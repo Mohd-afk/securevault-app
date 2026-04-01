@@ -181,17 +181,9 @@ export async function revokeDevice(uid: string, targetDeviceId: string) {
     await deleteDoc(targetRef);
     log.info('Revoked device', { targetDeviceId });
 
-    // 2. Bump tokenVersion
-    const tokenRef = doc(getFirebaseDb(), `users/${uid}/data/tokenVersion`);
-    
-    const tokenSnap = await getDoc(tokenRef);
-    let currentVersion = 0;
-    if (tokenSnap.exists() && typeof tokenSnap.data().version === 'number') {
-        currentVersion = tokenSnap.data().version;
-    }
-    
-    await setDoc(tokenRef, { version: currentVersion + 1 }, { merge: true });
-    log.info('Incremented tokenVersion', { newVersion: currentVersion + 1 });
+    // Note: We do not bump tokenVersion here because that would log out ALL devices,
+    // not just the target device. Deleting the target device document triggers the
+    // targeted device's snapshot listener, kicking it out.
   } catch (error) {
     log.error('Failed to revoke device', error);
     throw error;
@@ -225,8 +217,16 @@ export async function revokeAllOtherDevices(uid: string) {
     if (tokenSnap.exists() && typeof tokenSnap.data().version === 'number') {
         currentVersion = tokenSnap.data().version;
     }
-    await setDoc(tokenRef, { version: currentVersion + 1 }, { merge: true });
-    log.info('Incremented tokenVersion', { newVersion: currentVersion + 1 });
+    
+    const newVersion = currentVersion + 1;
+    await setDoc(tokenRef, { version: newVersion }, { merge: true });
+    
+    // Update local cache so we don't log ourselves out!
+    if (sessionTokenVersion !== null) {
+      sessionTokenVersion = newVersion;
+    }
+    
+    log.info('Incremented tokenVersion', { newVersion });
   } catch (error) {
     log.error('Failed to revoke all other devices', error);
     throw error;
