@@ -642,6 +642,33 @@ Migrated Google Sign-In from web `signInWithPopup` to a native Capacitor impleme
 - **Native Implementation**: Uses `@capacitor-firebase/authentication` to handle the OAuth flow natively, bypassing WebView popup restrictions.
 - **Firebase Configuration**: Integrated `google-services.json` directly into the Android source, enabling standard Google Play Services authentication.
 - **Credential Handover**: The native `idToken` is securely passed to the JS SDK via `signInWithCredential()`, maintaining full compatibility with existing Firestore security rules and user data mapping.
-- **APK Requirement**: This update **requires a new native APK build** as it introduces new native plugins and resource files that cannot be delivered via OTA updates.
-- **Key Files**: `src/app/auth.ts`, `src/app/components/AuthScreen.tsx`, `android/app/google-services.json`.
+- **APK Requirement**: This update **requires a new native APK build** as it introduces new native plugins and resource files that cannot be delivered via OTA update
+
+### Native APK Release v3.0 — 2026-04-01
+
+- **Problem**: Biometric settings were lost on logout, and Google Sign-In would fail on Android with "Sign-in failed" error.
+- **Solution**: Updated `clearLocalVaultData()` to preserve device settings. Configured native Firebase Authentication in `capacitor.config.ts` and `variables.gradle`.
+- **Key Files**: 
+    - `src/app/store.ts` (Biometric preservation)
+    - `capacitor.config.ts` (Plugin config)
+    - `android/variables.gradle` (Build flags)
+    - `android/app/build.gradle` (Version bump v3)
+- **Deployment**: Released v3 APK to GitHub and triggered update via Firestore `min_apk_version: 3`.
+
+---
+
+**Bug Fix: Biometric Settings Persistence Across Logouts (2026-04-01)**
+Resolved a regression where biometric unlock was being disabled every time the user signed out or a device session was revoked.
+- **Root Cause**: `clearLocalVaultData()` in `store.ts` was deleting both `securevault_items` (encrypted vault cache) AND `securevault_settings` (user preferences like `biometricEnabled`, `autoLockTimeout`). On next login, settings fell back to `defaultSettings` which has `biometricEnabled: false`.
+- **Fix**: `clearLocalVaultData()` now only deletes `securevault_items`. Settings are intentionally preserved as they are device-level preferences, not sensitive vault data. The actual passwords are always safe — they live in Firestore (cloud); the local IndexedDB copy is merely a cache re-downloaded on login.
+- **Key Files**: `src/app/store.ts` (`clearLocalVaultData`)
+
+---
+
+**Bug Fix: Google Sign-In Fails on Android — "sign in failed, try again later" (2026-04-01)**
+Resolved native Google Sign-In failure on Android that occurred despite the web flow working fine.
+- **Root Cause**: `rgcfaIncludeGoogle = true` was missing from `android/variables.gradle`. This flag is REQUIRED by `@capacitor-firebase/authentication` v6+ to Gradle-include the Google Play Services Auth dependency. Without it, the native Google module is silently excluded from the APK build, causing the error at runtime. SHA-1 certificate and `google-services.json` were already correct.
+- **Fix**: Added `rgcfaIncludeGoogle = true` to `variables.gradle`. Also added `FirebaseAuthentication` plugin config block in `capacitor.config.ts` (`skipNativeAuth: false`, `providers: ['google.com']`) for proper plugin initialization.
+- **Key Files**: `android/variables.gradle`, `capacitor.config.ts`
+
 
