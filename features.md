@@ -671,4 +671,15 @@ Resolved native Google Sign-In failure on Android that occurred despite the web 
 - **Fix**: Added `rgcfaIncludeGoogle = true` to `variables.gradle`. Also added `FirebaseAuthentication` plugin config block in `capacitor.config.ts` (`skipNativeAuth: false`, `providers: ['google.com']`) for proper plugin initialization.
 - **Key Files**: `android/variables.gradle`, `capacitor.config.ts`
 
+---
+
+**Bug Fix: Device Revocation Force-Logout (OTA v3.0.1 — 2026-04-02)**
+Resolved a critical bug where revoking any device session (even a remote one) would incorrectly log out the current user.
+- **Root Cause**: Both `revokeDevice()` and `revokeAllOtherDevices()` were unconditionally incrementing the global `tokenVersion` in Firestore. The current device's listener would detect this mismatch and trigger an immediate `signOut()`.
+- **Fix**: 
+    1. **Single Device**: Removed the `tokenVersion` bump. Now, only the target device document is deleted. The target device's `onSnapshot` listener handles the local logout when its own document disappears.
+    2. **All Other Devices**: The `tokenVersion` bump is preserved for security (to invalidate potential stolen sessions), but the local `sessionTokenVersion` cache is now updated *before* the listener reflects the change, exempting the current session from the revocation.
+- **Key Files**: `src/app/services/deviceSession.ts` (`revokeDevice`, `revokeAllOtherDevices`)
+- **Deployment**: Released via OTA v3.0.1.
+
 

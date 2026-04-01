@@ -1053,7 +1053,7 @@ export function Settings() {
                             <button
                                 onClick={() => {
                                     updateSetting('allowScreenshots', !settings.allowScreenshots);
-                                    if (settings.allowScreenshots) {
+                                    if (settings.allowScreenshots && !Capacitor.isNativePlatform()) {
                                         toast.info('Screenshot blocking requires the Android wrapper to be installed.');
                                     }
                                 }}
@@ -1218,7 +1218,7 @@ export function Settings() {
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".csv"
+                                accept=".csv,text/csv,application/csv,application/vnd.ms-excel,*/*"
                                 onChange={handleFileSelect}
                                 className="hidden"
                             />
