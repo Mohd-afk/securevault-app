@@ -1218,7 +1218,6 @@ export function Settings() {
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".csv,text/csv,application/csv,application/vnd.ms-excel,*/*"
                                 onChange={handleFileSelect}
                                 className="hidden"
                             />
