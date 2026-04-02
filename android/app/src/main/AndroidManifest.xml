@@ -22,6 +22,28 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!--
+                OAuth Redirect Handler — Required for Google Sign-In web fallback.
+
+                On most devices, @capacitor-firebase/authentication uses Android's
+                native Credential Manager API and never needs a redirect URI.
+                However, on devices where Credential Manager fails (Android 14 strict
+                account permissions, OEM Google Play Services forks, SHA-1 mismatch),
+                the plugin falls back to a web-based OAuth popup. That popup redirects
+                back to com.mohdj.securevault:/ — and without this intent-filter,
+                Android has no handler for that URI scheme, returning a 404 error.
+
+                android:autoVerify="true" is intentional: it allows the system to
+                verify the association without requiring user interaction on modern
+                Android versions.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.mohdj.securevault" />
+            </intent-filter>
+
         </activity>
 
         <activity

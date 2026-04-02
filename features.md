@@ -682,4 +682,27 @@ Resolved a critical bug where revoking any device session (even a remote one) wo
 - **Key Files**: `src/app/services/deviceSession.ts` (`revokeDevice`, `revokeAllOtherDevices`)
 - **Deployment**: Released via OTA v3.0.1.
 
+---
+
+**Bug Fix: Vault Immediately Locks After New Vault Creation (conversation `4daacfd4` — 2026-04-02)**
+Resolved critical bug where new users (or users resetting their vault) would be sent to the "Vault is locked" screen immediately after creating their vault.
+- **Root Cause**: `setupInitialVault()` in `store.ts` correctly encrypted and saved the empty vault to IndexedDB and Firestore, but never populated the in-memory session variables (`_sessionCryptoKey`, `_sessionPassword`, `_cachedItems`). `isVaultUnlocked()` only checks `_sessionCryptoKey`, so it always returned `false` post-setup. `AuthScreen.tsx`'s `handleSetupMaster` did call `setSessionPassword(password)` — but that function only sets `_sessionPassword`, not `_sessionCryptoKey`. The vault was permanently considered locked until the user manually unlocked it again.
+- **Fix**: `setupInitialVault()` now hydrates all three session variables (`_sessionCryptoKey`, `_sessionPassword`, `_cachedItems = []`) immediately after vault creation, matching the behavior of `unlockVault()`.
+- **Key Files**: `src/app/store.ts` (`setupInitialVault`)
+
+---
+
+**Bug Fix: OTA False-Rollback Poisoning After APK Reinstall (conversation `4daacfd4` — 2026-04-02)**
+Resolved a critical scenario where installing a new major APK from GitHub Releases would permanently block OTA updates from being applied.
+- **Root Cause**: `resetWhenUpdate: false` in `capacitor.config.ts` causes localStorage to persist across APK installs. When a user installs a new APK (e.g. v3.0.0) while an OTA download is in progress (`sv_ota_pending_version = "3.0.2"`), the app boots with `isBuiltin=true` plus a stale pending version. The boot logic interprets this as a "rollback" and calls `addFailedVersion("3.0.2")`, permanently blacklisting the version. The subsequent OTA check sees `hasFailedVersion("3.0.2") === true` and skips it forever.
+- **Fix**: Added a **native version migration guard** at the top of `initUpdater()`. On every boot, `App.getInfo().version` is compared against `sv_ota_native_version` in localStorage. If a version change is detected (new APK installed), ALL OTA localStorage keys are cleared — including `FAILED_VERSIONS_KEY` — before any other logic runs.
+- **Key Files**: `src/app/services/updater.ts` (`initUpdater`, `NATIVE_VERSION_KEY`)
+
+---
+
+**Bug Fix: Google OAuth 404 Error on Android 14 (conversation `4daacfd4` — 2026-04-02)**
+Resolved a 404 error during Google Sign-In on devices where the native Credential Manager flow falls back to web OAuth.
+- **Root Cause**: `@capacitor-firebase/authentication` uses Android Credential Manager natively on most devices (no redirect needed). On devices where Credential Manager fails — Android 14 strict account permissions, OEM Google Play Services forks (e.g., Realme GT Neo 3T), or SHA-1 mismatch — the plugin falls back to a web OAuth popup. That popup redirects back to `com.mohdj.securevault:/`. Without a matching intent-filter in `AndroidManifest.xml`, Android had no registered receiver for the custom URI scheme and returned a 404. This explains why some users (Credential Manager path) worked and others didn't (web popup fallback path).
+- **Fix**: Added `intent-filter` with `android:scheme="com.mohdj.securevault"` and `android:autoVerify="true"` to `.MainActivity` in `AndroidManifest.xml`.
+- **Key Files**: `android/app/src/main/AndroidManifest.xml`
 

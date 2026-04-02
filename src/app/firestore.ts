@@ -245,3 +245,12 @@ export async function changeUsername(uid: string, oldUsername: string, newUserna
     await batch.commit();
     log.info('Username changed successfully', { uid, oldUsername, newUsername });
 }
+
+/**
+ * Save user's email directly to their top-level user document.
+ * This makes the email visible in the Firestore Console under the users collection.
+ */
+export async function saveUserEmailToProfile(uid: string, email: string): Promise<void> {
+    log.info('Saving user email to top-level user document', { uid });
+    await setDoc(doc(getFirebaseDb(), 'users', uid), { email, updatedAt: serverTimestamp() }, { merge: true });
+}

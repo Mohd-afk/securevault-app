@@ -24,6 +24,13 @@ const PENDING_VERSION_KEY = 'sv_ota_pending_version';
 const PENDING_BUNDLE_ID_KEY = 'sv_ota_pending_bundle_id';
 const ACTIVE_VERSION_KEY = 'sv_ota_active_version';
 const FAILED_VERSIONS_KEY = 'sv_ota_failed_versions';
+/**
+ * Tracks the native binary version (from App.getInfo()) that was running
+ * when OTA state was last written. If the native version changes (i.e. the
+ * user installed a new APK from GitHub Releases), all OTA state becomes
+ * invalid and must be cleared to prevent the false-rollback poisoning path.
+ */
+const NATIVE_VERSION_KEY = 'sv_ota_native_version';
 
 /** Firestore path: app_config/latest_version */
 const VERSION_DOC_PATH = 'app_config';
@@ -102,6 +109,45 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
   if (!Capacitor.isNativePlatform()) {
     log.debug('Skipping OTA updater — not a native platform');
     return;
+  }
+
+  // ── MIGRATION GUARD: Detect native APK version changes ──────────────────
+  // Problem: resetWhenUpdate=false means localStorage persists across APK
+  // installs. If the user installs a new major APK (e.g. v3.0.0) while an OTA
+  // download was in progress (sv_ota_pending_version = "3.0.2"), the new APK
+  // boots with isBuiltin=true AND a stale pending version. The boot logic below
+  // sees (isBuiltin + pendingVersion) and calls addFailedVersion("3.0.2"),
+  // permanently blacklisting v3.0.2. The OTA check then sees
+  // hasFailedVersion("3.0.2") === true and SKIPS IT FOREVER.
+  //
+  // Fix: compare current native binary version against what was stored when OTA
+  // state was last written. On mismatch, wipe all OTA keys before any further
+  // logic runs, giving the updater a clean slate on the new native base.
+  try {
+    const appInfo = await App.getInfo();
+    const currentNativeVersion = appInfo.version;
+    const storedNativeVersion = localStorage.getItem(NATIVE_VERSION_KEY);
+
+    if (storedNativeVersion && storedNativeVersion !== currentNativeVersion) {
+      log.warn(
+        `[OTA MIGRATION] Native APK version changed: ${storedNativeVersion} → ${currentNativeVersion}. ` +
+        `Clearing all stale OTA state to prevent false-rollback poisoning.`
+      );
+      // Clear all OTA keys. Without this, a version that was mid-download when
+      // the APK was replaced would be permanently marked as "failed" (rolled back)
+      // and never re-attempted, silently blocking all future OTA updates.
+      localStorage.removeItem(PENDING_VERSION_KEY);
+      localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
+      localStorage.removeItem(ACTIVE_VERSION_KEY);
+      localStorage.removeItem(FAILED_VERSIONS_KEY);
+      log.info('[OTA MIGRATION] All OTA localStorage keys cleared. OTA state reset for new native base.');
+    }
+
+    // Always persist the current native version so future boots can detect changes.
+    localStorage.setItem(NATIVE_VERSION_KEY, currentNativeVersion);
+    log.debug(`[OTA MIGRATION] Native version recorded: ${currentNativeVersion}`);
+  } catch (e) {
+    log.warn('[OTA MIGRATION] Could not read App.getInfo() for native version check. Skipping migration guard.', e);
   }
 
   // Verification step: check if we just rebooted from an update

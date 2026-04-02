@@ -8,6 +8,7 @@ import { getFirebaseAuth } from '../firebase';
 import type { User } from 'firebase/auth';
 import { createLogger } from '../utils/logger';
 import { registerCurrentDevice, listenForRevocation, updateLastActive } from '../services/deviceSession';
+import { saveUserEmailToProfile } from '../firestore';
 
 const log = createLogger('UI');
 
@@ -189,6 +190,10 @@ export function AppShell() {
         handleSignOut();
       });
     }).catch(e => log.error('AppShell: Failed to register device', e));
+
+    if (user.email) {
+      saveUserEmailToProfile(user.uid, user.email).catch(e => log.error('AppShell: Failed to save email to profile', e));
+    }
 
     // Update lastActive on user interactions, throttled internally to 10 min
     const handleInteraction = () => {

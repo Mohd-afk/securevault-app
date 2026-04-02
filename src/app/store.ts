@@ -193,6 +193,20 @@ export async function setupInitialVault(password: string): Promise<void> {
       log.error('Failed to save empty vault to cloud', e);
     }
   }
+
+  // ── FIX: Hydrate in-memory session immediately after vault creation ──────
+  // Without this, isVaultUnlocked() returns false after setupInitialVault,
+  // causing AuthScreen's onAuthenticated() to navigate the user to the
+  // "Vault is locked" screen instead of the open vault.
+  //
+  // NOTE: AuthScreen.tsx calls setSessionPassword(password) after this function,
+  // but setSessionPassword() only sets _sessionPassword — it does NOT set
+  // _sessionCryptoKey. isVaultUnlocked() checks ONLY _sessionCryptoKey, so
+  // without this block the vault is permanently considered locked post-setup.
+  _sessionCryptoKey = key;
+  _sessionPassword = password;
+  _cachedItems = [];
+  log.info('Session hydrated after vault creation — vault is now considered unlocked', { uid });
 }
 
 export async function verifyMasterPassword(password: string): Promise<boolean> {
