@@ -706,3 +706,29 @@ Resolved a 404 error during Google Sign-In on devices where the native Credentia
 - **Fix**: Added `intent-filter` with `android:scheme="com.mohdj.securevault"` and `android:autoVerify="true"` to `.MainActivity` in `AndroidManifest.xml`.
 - **Key Files**: `android/app/src/main/AndroidManifest.xml`
 
+---
+
+## Production Release v3.1.0 — Stability Fixes (2026-04-02)
+
+### Overview
+This release (versionCode 4, versionName 3.1.0) addresses three major production blockers identified in existing v3.0.0 builds. It resolves a critical vault race condition, enables reliable OTA update recovery, and fixes Google Sign-in on Android 14 devices.
+
+### Change Detail
+- **Vault Setup Fix**: `setupInitialVault()` now ensures immediate session hydration, preventing new users from being locked out of their fresh vault.
+- **OTA Recovery Fix**: Implemented a native version migration guard that detects manual APK upgrades and clears stale OTA `localStorage` to prevent "false-rollback" poisoning.
+- **Google OAuth Filter**: Registered a custom intent-filter for `com.mohdj.securevault` to handle web-based OAuth redirects on devices with restricted Credential Manager access.
+
+### Key Files
+- `src/app/store.ts`
+- `src/app/services/updater.ts`
+- `android/app/src/main/AndroidManifest.xml`
+- `android/app/build.gradle`
+- `package.json`
+
+---
+
+**Bug Fix: Native Version Overridden by active OTA Bundles causing infinite App Update Prompt (2026-04-07)**
+Resolved a critical issue where the application continued to display a mandatory "App Update Required" banner even after a successful APK update (from versionName 3.0.0 to 3.1.0).
+- **Root Cause**: `CapacitorUpdater` transparently hooks into Capacitor's standard `App.getInfo()` API. When an OTA bundle is active (e.g. bundle 0.0.9), `App.getInfo().version` returns the *bundle* version (0.0.9), not the true underlying native APK version. The native version check was comparing this overwritten version against the `min_apk_version` stored in Firestore (which expected "3.1.0"), resulting in false-positive "Upgrade Required" triggers.
+- **Fix**: Replaced all usages of `App.getInfo().version` for system upgrade checks with `CapacitorUpdater.current().native`. This bypasses the OTA override and fetches the unadulterated native APK version to correctly evaluate min-app requirements and the OTA migration guard.
+- **Key Files**: `src/app/services/apk-update-checker.ts`, `src/app/services/updater.ts`

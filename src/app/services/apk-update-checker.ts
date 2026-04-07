@@ -6,17 +6,19 @@
 // changes. This service handles native-level updates that require a full APK.
 //
 // Flow:
-//   1. Get current.native from CapacitorUpdater (e.g. "3.0", "1.0")
+//   1. Get app version via App.getInfo() (e.g. "3.1.0") — full semver
 //   2. Fetch min_apk_version + apk_download_url from Firestore
-//   3. Compare and return { updateRequired, downloadUrl? }
+//      min_apk_version can be stored as a string ("3.1.0") or a number (3)
+//   3. Compare using semver and return { updateRequired, downloadUrl? }
 //
 // NEVER throws — if anything fails, returns { updateRequired: false }
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { doc, getDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '../firebase';
 import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
+import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('APK_UPDATE');
@@ -31,17 +33,50 @@ export interface ApkUpdateCheckResult {
 }
 
 /**
- * Parse a native version string like "2.0", "3.0", "1" into an integer.
- * Takes the major component only.
- * Returns null if the string cannot be parsed.
+ * Compare two semantic version strings.
+ * Returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal.
+ * Supports "3", "3.0", "3.1.0" formats.
  */
-function parseNativeVersion(raw: string | undefined | null): number | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  // Accept "3", "3.0", "3.0.0" — take only the first numeric segment
-  const major = parseInt(trimmed.split('.')[0], 10);
-  if (isNaN(major)) return null;
-  return major;
+function compareVersions(v1: string, v2: string): number {
+  if (!v1 || !v2) return 0;
+  const p1 = v1.split('.').map(Number);
+  const p2 = v2.split('.').map(Number);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = isNaN(p1[i]) ? 0 : (p1[i] ?? 0);
+    const num2 = isNaN(p2[i]) ? 0 : (p2[i] ?? 0);
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+/**
+ * Normalise whatever is stored in Firestore as min_apk_version into a
+ * semver-compatible string.
+ *
+ * Firestore may store:
+ *   - a number  → 4        means major version 4 (i.e. "4.0.0")
+ *   - a string  → "3.1.0"  means exact semver
+ *
+ * Returns null if the value cannot be normalised.
+ */
+function normaliseMinVersion(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+
+  if (typeof raw === 'number') {
+    if (isNaN(raw)) return null;
+    return `${raw}.0.0`;
+  }
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    // Validate: must at least have one numeric segment
+    if (isNaN(Number(trimmed.split('.')[0]))) return null;
+    return trimmed;
+  }
+
+  return null;
 }
 
 /**
@@ -58,19 +93,44 @@ export async function checkApkUpdateRequired(): Promise<ApkUpdateCheckResult> {
   }
 
   try {
-    // ── Step 1: Get installed native APK version ─────────────────────────
-    const current = await CapacitorUpdater.current();
-    const nativeVersionRaw = current?.native;
+    // ── Step 1: Get installed native APK version via App.getInfo() ──────────
+    // App.getInfo() returns the versionName from build.gradle ("3.1.0"),
+    // which is the full semver that we must compare against min_apk_version.
+    // This is consistent with how updater.ts reads the native version.
+    let installedVersionRaw: string | null = null;
 
-    log.info(`[APK_UPDATE] CapacitorUpdater.current().native = "${nativeVersionRaw}"`);
+    try {
+      if (Capacitor.isPluginAvailable('CapacitorUpdater')) {
+        const updaterInfo = await CapacitorUpdater.current();
+        installedVersionRaw = updaterInfo.native ?? null;
+        log.info(`[APK_UPDATE] CapacitorUpdater.current().native = "${installedVersionRaw}"`);
+      }
+      
+      // Fallback to App.getInfo() if CapacitorUpdater didn't provide a native version
+      // or the plugin is entirely missing.
+      if (!installedVersionRaw) {
+        const appInfo = await App.getInfo();
+        installedVersionRaw = appInfo.version ?? null;
+        log.info(`[APK_UPDATE] App.getInfo().version = "${installedVersionRaw}"`);
+      }
+    } catch (e) {
+      log.warn('[APK_UPDATE] Failed to determine installed version:', e);
+    }
 
-    const installedApkVersion = parseNativeVersion(nativeVersionRaw);
-    if (installedApkVersion === null) {
-      log.warn('[APK_UPDATE] Could not parse native version string — skipping check');
+    if (!installedVersionRaw) {
+      log.warn('[APK_UPDATE] Could not determine installed APK version — skipping check');
       return { updateRequired: false };
     }
 
-    log.info(`[APK_UPDATE] Parsed installed APK version: ${installedApkVersion}`);
+    // Ensure it is parseable
+    const installedParts = installedVersionRaw.trim().split('.').map(Number);
+    if (installedParts.length === 0 || isNaN(installedParts[0])) {
+      log.warn(`[APK_UPDATE] Unparseable version string "${installedVersionRaw}" — skipping check`);
+      return { updateRequired: false };
+    }
+
+    const installedVersion = installedVersionRaw.trim();
+    log.info(`[APK_UPDATE] Installed APK version: "${installedVersion}"`);
 
     // ── Step 2: Fetch Firestore version document ─────────────────────────
     const db = getFirebaseDb();
@@ -83,26 +143,30 @@ export async function checkApkUpdateRequired(): Promise<ApkUpdateCheckResult> {
     }
 
     const data = snapshot.data();
-    const minApkVersion: number | undefined = data?.min_apk_version;
+    const rawMinApkVersion = data?.min_apk_version;
     const apkDownloadUrl: string | undefined = data?.apk_download_url;
 
-    if (typeof minApkVersion !== 'number') {
-      log.debug('[APK_UPDATE] min_apk_version not set in Firestore — no APK requirement active');
+    log.info(`[APK_UPDATE] Firestore raw min_apk_version: ${JSON.stringify(rawMinApkVersion)}, type: ${typeof rawMinApkVersion}`);
+
+    const minApkVersion = normaliseMinVersion(rawMinApkVersion);
+
+    if (minApkVersion === null) {
+      log.debug('[APK_UPDATE] min_apk_version not set or invalid in Firestore — no APK requirement active');
       return { updateRequired: false };
     }
 
-    log.info(`[APK_UPDATE] Firestore min_apk_version: ${minApkVersion}, apk_download_url: ${apkDownloadUrl}`);
+    log.info(`[APK_UPDATE] Normalised min_apk_version: "${minApkVersion}", installed: "${installedVersion}"`);
 
     // ── Step 3: Compare and return result ────────────────────────────────
-    if (installedApkVersion < minApkVersion) {
-      log.warn(`[APK_UPDATE] UPDATE REQUIRED — installed: ${installedApkVersion}, required: ${minApkVersion}`);
+    if (compareVersions(installedVersion, minApkVersion) < 0) {
+      log.warn(`[APK_UPDATE] UPDATE REQUIRED — installed: "${installedVersion}", required: ">= ${minApkVersion}"`);
       return {
         updateRequired: true,
         downloadUrl: apkDownloadUrl || 'https://github.com/Mohd-afk/securevault-app/releases/latest',
       };
     }
 
-    log.info(`[APK_UPDATE] APK version OK (installed: ${installedApkVersion} >= required: ${minApkVersion})`);
+    log.info(`[APK_UPDATE] APK version OK (installed: "${installedVersion}" >= required: "${minApkVersion}")`);
     return { updateRequired: false };
 
   } catch (err) {

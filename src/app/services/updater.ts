@@ -124,8 +124,13 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
   // state was last written. On mismatch, wipe all OTA keys before any further
   // logic runs, giving the updater a clean slate on the new native base.
   try {
-    const appInfo = await App.getInfo();
-    const currentNativeVersion = appInfo.version;
+    let currentNativeVersion: string;
+    try {
+      const current = await CapacitorUpdater.current();
+      currentNativeVersion = current.native || (await App.getInfo()).version;
+    } catch(e) {
+      currentNativeVersion = (await App.getInfo()).version;
+    }
     const storedNativeVersion = localStorage.getItem(NATIVE_VERSION_KEY);
 
     if (storedNativeVersion && storedNativeVersion !== currentNativeVersion) {
@@ -147,7 +152,7 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
     localStorage.setItem(NATIVE_VERSION_KEY, currentNativeVersion);
     log.debug(`[OTA MIGRATION] Native version recorded: ${currentNativeVersion}`);
   } catch (e) {
-    log.warn('[OTA MIGRATION] Could not read App.getInfo() for native version check. Skipping migration guard.', e);
+    log.warn('[OTA MIGRATION] Could not read native version for check. Skipping migration guard.', e);
   }
 
   // Verification step: check if we just rebooted from an update
@@ -230,13 +235,19 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   // 2.5 Ensure native minimum app version requirements are met
   if (remote.minAppVersion) {
     try {
-      const { version: nativeVersion } = await App.getInfo();
+      let nativeVersion: string;
+      try {
+        const currentInfo = await CapacitorUpdater.current();
+        nativeVersion = currentInfo.native || (await App.getInfo()).version;
+      } catch(e) {
+        nativeVersion = (await App.getInfo()).version;
+      }
       if (compareVersions(nativeVersion, remote.minAppVersion) < 0) {
         log.warn(`[OTA_EVENT: check_failed] Remote update requires minAppVersion ${remote.minAppVersion}, but native app is ${nativeVersion}. Skipping.`);
         return;
       }
     } catch (e) {
-      log.warn('Could not check native App version for minAppVersion enforcement', e);
+      log.warn('Could not check native version for minAppVersion enforcement', e);
     }
   }
 
