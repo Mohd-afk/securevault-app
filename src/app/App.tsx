@@ -123,7 +123,7 @@ export default function App() {
   // plugin can cause the OTA critical-update flow to also fail.
   if (apkUpdateRequired) return <ApkUpdateBanner downloadUrl={apkDownloadUrl} />;
 
-  if (criticalUpdate) return <CriticalUpdateScreen />;
+  if (criticalUpdate) return <CriticalUpdateScreen onTimeout={() => setCriticalUpdate(false)} />;
 
   return (
     <div className="dark min-h-screen bg-[#1a1a2e]">

@@ -83,9 +83,16 @@ class AutofillHelper {
             val passwordKeywords = listOf("password", "passcode", "pin", "secret", "passwd", "contraseña", "senha", "пароль", "密码")
             val usernameKeywords = listOf("username", "email", "login", "account", "phone", "userid", "member", "user name", "correo", "usuario")
 
-            if (isPasswordInputType || passwordKeywords.any { combined.contains(it) }) {
+            // Layer 5: Web-specific attribute checks (type, name, id)
+            val htmlType = node.htmlInfo?.attributes?.find { it.first == "type" }?.second?.lowercase() ?: ""
+            val htmlName = node.htmlInfo?.attributes?.find { it.first == "name" }?.second?.lowercase() ?: ""
+            val htmlId = node.htmlInfo?.attributes?.find { it.first == "id" }?.second?.lowercase() ?: ""
+            val combinedWeb = "$htmlType $htmlName $htmlId".lowercase()
+
+            if (isPasswordInputType || passwordKeywords.any { combined.contains(it) } || htmlType == "password") {
                 result.passwordNodes.add(node)
-            } else if (usernameKeywords.any { combined.contains(it) }) {
+            } else if (usernameKeywords.any { combined.contains(it) } || 
+                       htmlType == "email" || htmlType == "text" && usernameKeywords.any { combinedWeb.contains(it) }) {
                 if (isEditableNode(node)) {
                     result.usernameNodes.add(node)
                 }

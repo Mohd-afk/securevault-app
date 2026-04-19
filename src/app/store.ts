@@ -34,6 +34,7 @@ export interface BiometricBridgePlugin {
   isBiometricEnabled(): Promise<{ enabled: boolean }>;
   syncAutoLockTimeout(options: { timeoutMinutes: number }): Promise<{ success: boolean }>;
   syncAutofillBlocklist(options: { blocklist: string[] }): Promise<{ success: boolean }>;
+  isAutofillEnabled(): Promise<{ enabled: boolean }>;
 }
 
 const VaultBridge = registerPlugin<VaultBridgePlugin>('VaultBridge');
@@ -877,23 +878,44 @@ export async function resetVault(): Promise<void> {
 
 async function syncToNativeVault(items: VaultItem[]): Promise<void> {
   if (Capacitor.getPlatform() !== 'android') return;
-  
+
+  // ── Security Model: Native Autofill Database ────────────────────────────────
+  //
+  // Passwords are passed as PLAINTEXT to the native Android SQLCipher database.
+  // This is intentional and correct — the JS vault is already decrypted in
+  // memory at this point (syncToNativeVault is only called from saveVaultEverywhere
+  // or unlockVault, both of which run when the vault is unlocked).
+  //
+  // The security boundary for the native autofill DB is:
+  //   • SQLCipher AES-256 encryption of the entire database file
+  //   • The database passphrase is a per-device 256-bit random key
+  //   • That passphrase is stored wrapped by an Android Keystore key
+  //     (hardware-backed on supported devices)
+  //
+  // We do NOT apply an additional application layer of encryption here
+  // because the native autofill service cannot access the JS master-password-
+  // derived PBKDF2 key, and applying the biometric DEK (a different key) would
+  // produce a ciphertext that the native service still could not decrypt.
+  //
+  // See also: VaultItemEntity.kt for the full threat model documentation.
+  // ────────────────────────────────────────────────────────────────────────────
+
   try {
     const validItems = items.map(i => ({
       id: i.id,
       title: i.title || '',
       username: i.username || '',
-      password: i.password || '',
+      password: i.password || '',                          // Plaintext — SQLCipher DB is the boundary
       uris: JSON.stringify(i.url ? [i.url] : []),
       type: i.type || 'Other',
       note: i.note || '',
       createdAt: new Date(i.createdAt).getTime(),
       updatedAt: new Date(i.updatedAt).getTime(),
-      deletedAt: i.deletedAt ? new Date(i.deletedAt).getTime() : null
+      deletedAt: i.deletedAt ? new Date(i.deletedAt).getTime() : null,
     }));
 
     await VaultBridge.fullSync({ items: validItems });
-    log.debug('Native SQLite vault sync completed', { count: validItems.length });
+    log.debug('Native SQLCipher vault sync completed', { count: validItems.length });
   } catch (e) {
     log.error('Failed to sync to Native Vault', e);
   }
@@ -1021,4 +1043,15 @@ export async function disableBiometricUnlock(): Promise<void> {
   const settings = await getSettings();
   await saveSettings({ ...settings, biometricEnabled: false });
   log.info('Biometric unlock disabled');
+}
+
+export async function isAutofillEnabled(): Promise<boolean> {
+  if (Capacitor.getPlatform() !== 'android') return false;
+  try {
+    const res = await BiometricBridge.isAutofillEnabled();
+    return res.enabled;
+  } catch (e) {
+    log.warn('Failed to check autofill status', e);
+    return false;
+  }
 }

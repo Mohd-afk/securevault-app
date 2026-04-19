@@ -11,28 +11,94 @@ class DomainMatcher(private val context: Context? = null) {
     private val pslWildcardRules = mutableSetOf<String>()
     private val pslExceptionRules = mutableSetOf<String>()
     
-    // Known app package mappings
+    // ── Known App Package → Domain Mappings ────────────────────────────────────
+    //
+    // RC2: These mappings allow the autofill service to associate a native Android
+    // app's package name with its corresponding web domain — enabling credentials
+    // saved for "instagram.com" to suggested in the Instagram app.
+    //
+    // Design rules:
+    //   1. Mappings are OPTIONAL — unknown packages fall back to the package name
+    //      itself as the identity key (see getAppMapping + service RC2 logic).
+    //   2. Browser entries (Chrome, Firefox, etc.) are included for completeness but
+    //      are rarely used in practice: for browsers, Android supplies webDomain
+    //      directly from the URL bar, which is more accurate than any mapping.
+    //   3. Do NOT add social-engineering entries that could enable false matches.
+    //   4. Each entry must be verified against an official source.
+    // ────────────────────────────────────────────────────────────────────────────
     private val appMappings = mutableMapOf(
-        "com.netflix.mediaclient" to "netflix.com",
-        "com.twitter.android" to "twitter.com",
-        "com.facebook.katana" to "facebook.com",
-        "com.instagram.android" to "instagram.com",
-        "com.google.android.youtube" to "youtube.com",
-        "com.spotify.music" to "spotify.com",
+
+        // ── Social Media ─────────────────────────────────────────────────────
+        "com.twitter.android"              to "twitter.com",
+        "com.facebook.katana"              to "facebook.com",
+        "com.facebook.lite"                to "facebook.com",
+        "com.instagram.android"            to "instagram.com",
+        "com.pinterest"                    to "pinterest.com",
+        "com.linkedin.android"             to "linkedin.com",
+        "com.reddit.frontpage"             to "reddit.com",
+        "tv.twitch.android.app"            to "twitch.tv",
+        "com.snapchat.android"             to "snapchat.com",
+        "com.tumblr"                       to "tumblr.com",
+        "com.vk.android"                   to "vk.com",
+        "com.tiktok.android"               to "tiktok.com",
+
+        // ── Entertainment / Streaming ────────────────────────────────────────
+        "com.netflix.mediaclient"          to "netflix.com",
+        "com.hulu.plus"                    to "hulu.com",
+        "com.disney.disneyplus"            to "disneyplus.com",
+        "com.google.android.youtube"       to "youtube.com",
+        "com.spotify.music"                to "spotify.com",
+        "com.apple.android.music"          to "apple.com",
+        "com.primevideo.android"           to "primevideo.com",
+        "com.hbomax.android"               to "max.com",
+
+        // ── Shopping / Finance ───────────────────────────────────────────────
         "com.amazon.mShop.android.shopping" to "amazon.com",
-        "com.reddit.frontpage" to "reddit.com",
-        "com.pinterest" to "pinterest.com",
-        "com.linkedin.android" to "linkedin.com",
-        "com.dropbox.android" to "dropbox.com",
-        "com.slack" to "slack.com",
-        "com.discord" to "discord.com",
-        "com.github.android" to "github.com",
-        "com.microsoft.teams" to "microsoft.com",
-        "com.hulu.plus" to "hulu.com",
-        "com.disney.disneyplus" to "disneyplus.com",
-        "tv.twitch.android.app" to "twitch.tv",
-        "com.paypal.android.p2pmobile" to "paypal.com"
-        // Can be expanded further later, ideally pulling from a bundled JSON eventually
+        "com.paypal.android.p2pmobile"     to "paypal.com",
+        "com.ebay.mobile"                  to "ebay.com",
+        "com.etsy.android"                 to "etsy.com",
+        "com.shopify.mobile"               to "shopify.com",
+        "com.stripe.android"               to "stripe.com",
+
+        // ── Productivity / Communication ─────────────────────────────────────
+        "com.slack"                        to "slack.com",
+        "com.discord"                      to "discord.com",
+        "com.microsoft.teams"              to "teams.microsoft.com",
+        "com.github.android"               to "github.com",
+        "com.dropbox.android"              to "dropbox.com",
+        "com.google.android.apps.docs"     to "docs.google.com",
+        "com.google.android.gm"            to "mail.google.com",
+        "com.microsoft.office.outlook"     to "outlook.com",
+        "com.microsoft.office.word"        to "office.com",
+        "com.notion.id"                    to "notion.so",
+        "com.evernote"                     to "evernote.com",
+        "com.todoist.android"              to "todoist.com",
+        "com.airtable.android"             to "airtable.com",
+        "com.figma.android"                to "figma.com",
+        "io.vercel.android"                to "vercel.com",
+
+        // ── Cloud Storage ────────────────────────────────────────────────────
+        "com.google.android.apps.drive"    to "drive.google.com",
+        "com.box.android"                  to "box.com",
+        "com.onedrive.android"             to "onedrive.live.com",
+
+        // ── Browsers (webDomain is normally supplied directly by Android;      ─
+        //   these entries are a safety net for edge cases where it is missing.) ─
+        "com.android.chrome"               to "google.com",
+        "com.chrome.beta"                  to "google.com",
+        "com.chrome.dev"                   to "google.com",
+        "com.chrome.canary"                to "google.com",
+        "org.mozilla.firefox"              to "mozilla.org",
+        "org.mozilla.firefox_beta"         to "mozilla.org",
+        "org.mozilla.fenix"                to "mozilla.org",
+        "com.microsoft.emmx"               to "microsoft.com",
+        "com.brave.browser"                to "brave.com",
+        "com.opera.browser"                to "opera.com",
+        "com.opera.mini.native"            to "opera.com",
+        "com.samsung.android.app.sbrowser" to "samsung.com",
+        "com.duckduckgo.mobile.android"    to "duckduckgo.com",
+        "com.kiwibrowser.browser"          to "kiwibrowser.com",
+        "mark.via.gp"                      to "viayoo.com"
     )
 
     init {

@@ -260,6 +260,17 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   // 3. New version available — download it
   log.info(`New version available: ${remote.version} (active: ${activeVersion})`);
 
+  // Guard: if the bundle URL is empty/missing, this is an APK-only release.
+  // There is no OTA zip to fetch. Skip silently — the APK update checker will
+  // handle notifying the user via ApkUpdateBanner instead.
+  if (!remote.url || !remote.url.trim()) {
+    log.warn(
+      `[OTA_EVENT: skip_no_url] Remote version ${remote.version} has no OTA bundle URL. ` +
+      `This is an APK-only release. Skipping OTA download to avoid breaking the app.`
+    );
+    return;
+  }
+
   if (remote.critical) {
     log.warn('CRITICAL update — showing force-update screen');
     options.onCriticalUpdate?.();

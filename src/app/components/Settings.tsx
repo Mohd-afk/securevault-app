@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare } from 'lucide-react';
 import packageJson from '../../../package.json';
-import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability } from '../store';
+import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability, isAutofillEnabled } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
 import { subscribeToDevices, revokeDevice, revokeAllOtherDevices, type DeviceSession, getLocalDeviceId } from '../services/deviceSession';
@@ -135,6 +135,20 @@ export function Settings() {
             setBiometricAvailable(res.available);
             setBiometricReason(res.reason);
         });
+    }, []);
+
+    // ── Autofill Status ──────────────────────────────────────────────
+    const [autofillEnabled, setAutofillEnabled] = useState(false);
+
+    useEffect(() => {
+        const checkAutofillStatus = () => {
+            isAutofillEnabled().then(setAutofillEnabled);
+        };
+        checkAutofillStatus();
+        window.addEventListener('focus', checkAutofillStatus);
+        
+        // Capacitor App State listener could also be used but focus is generally sufficient for Settings
+        return () => window.removeEventListener('focus', checkAutofillStatus);
     }, []);
 
     const handleToggleBiometric = async () => {
@@ -1088,6 +1102,9 @@ export function Settings() {
                                 <p className="text-white text-sm flex items-center gap-2">
                                     <Globe className="w-4 h-4 text-cyan-400" />
                                     Android Autofill Service
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold \${autofillEnabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                        {autofillEnabled ? 'Enabled' : 'Disabled'}
+                                    </span>
                                 </p>
                                 <p className="text-gray-500 text-[11px] mt-1.5 leading-relaxed max-w-[240px]">
                                     Use SecureVault to automatically fill passwords in your other apps and websites.

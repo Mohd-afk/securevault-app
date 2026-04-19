@@ -159,6 +159,19 @@ class BiometricBridgePlugin : Plugin() {
         call.resolve(JSObject().put("success", true))
     }
 
+    @PluginMethod
+    fun isAutofillEnabled(call: PluginCall) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val autofillManager = context.getSystemService(android.view.autofill.AutofillManager::class.java)
+            if (autofillManager != null) {
+                val enabled = autofillManager.hasEnabledAutofillServices()
+                call.resolve(JSObject().put("enabled", enabled))
+                return
+            }
+        }
+        call.resolve(JSObject().put("enabled", false))
+    }
+
     private fun showBiometricPrompt(
         cipher: Cipher,
         title: String,

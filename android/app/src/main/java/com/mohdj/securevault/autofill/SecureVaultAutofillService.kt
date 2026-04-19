@@ -1,5 +1,19 @@
 package com.mohdj.securevault.autofill
 
+// ─── Change Log (v3.2.2) ──────────────────────────────────────────────────────
+// RC1: Removed incorrect AES-GCM decrypt block that applied BiometricVaultUnlocker DEK
+//      to plaintext passwords in the native SQLCipher DB. Passwords are now read and
+//      filled directly. The SQLCipher DB (keyed by Android Keystore) is the boundary.
+// RC2: Fixed rawDomain hard-abort. Unknown packages no longer collapse to null via PSL
+//      normalization. identityType is now explicitly tracked as "web" or "package".
+//      Unmapped native apps use their packageName as the lookup key.
+// RC3: Relaxed "naked password" session-cache guard for native app contexts (identityType
+//      == "package"). The multi-step phishing guard remains for web/browser flows only.
+// OBS: Added structured AUTOFILL_* log tags for adb logcat observability.
+//      Log prefix: "SecureVaultAutofill"
+// ─────────────────────────────────────────────────────────────────────────────
+
+import android.app.PendingIntent
 import android.app.assist.AssistStructure
 import android.content.Context
 import android.content.Intent
@@ -12,22 +26,17 @@ import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
 import android.service.autofill.SaveCallback
 import android.service.autofill.SaveRequest
-import android.service.autofill.SaveInfo
 import android.util.Log
 import android.view.autofill.AutofillValue
 import android.widget.RemoteViews
-import com.mohdj.securevault.R
+import com.mohdj.securevault.vault.VaultItemEntity
 import com.mohdj.securevault.vault.VaultRepository
+import com.mohdj.securevault.security.BiometricVaultUnlocker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import android.app.PendingIntent
-import com.mohdj.securevault.security.BiometricVaultUnlocker
-import android.util.Base64
-import javax.crypto.Cipher
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
-import java.security.Key
+
+private const val TAG = "SecureVaultAutofill"
 
 class SecureVaultAutofillService : AutofillService() {
 
@@ -39,7 +48,7 @@ class SecureVaultAutofillService : AutofillService() {
         super.onCreate()
         domainMatcher = DomainMatcher(applicationContext)
         vaultRepository = VaultRepository(applicationContext)
-        Log.i("SecureVaultAutofill", "Service Created")
+        Log.i(TAG, "Service created")
     }
 
     override fun onFillRequest(
@@ -47,334 +56,379 @@ class SecureVaultAutofillService : AutofillService() {
         cancellationSignal: CancellationSignal,
         callback: FillCallback
     ) {
-        val context: FillContext = request.fillContexts.lastOrNull() ?: return
-        val structure: AssistStructure = context.structure
-        
-        // 1. Parse the view hierarchy to find username/password fields
+        // ── 0. Get the top-level view structure ──────────────────────────────
+        val fillContext: FillContext = request.fillContexts.lastOrNull() ?: run {
+            Log.e(TAG, "AUTOFILL_SUPPRESSED_REASON=no_fill_context")
+            callback.onSuccess(null)
+            return
+        }
+
+        val structure: AssistStructure = fillContext.structure
+        val rawPackageName = structure.activityComponent?.packageName ?: ""
+        Log.i(TAG, "AUTOFILL_REQUEST_RECEIVED package=$rawPackageName")
+
+        // ── 1. Parse the view hierarchy ──────────────────────────────────────
         val parsed = autofillHelper.parseStructure(structure)
-        
         val hasUsername = parsed.usernameNodes.isNotEmpty()
         val hasPassword = parsed.passwordNodes.isNotEmpty()
 
-        if (!hasUsername && !hasPassword) {
-             Log.d("SecureVaultAutofill", "No relevant fields found for autofill")
-             callback.onSuccess(null)
-             return
-        }
+        Log.i(TAG, "AUTOFILL_PARSED_FIELDS usernameCount=${parsed.usernameNodes.size} " +
+                "passwordCount=${parsed.passwordNodes.size} webDomain=${parsed.webDomain}")
 
-        // 2. Identify the domain or package
-        val packageName = structure.activityComponent?.packageName ?: ""
-        
-        // Strict WebView fallback (Fix D): Don't guess the domain from package randomly
-        var mappedDomain: String? = null
-        if (packageName.isNotEmpty()) {
-            mappedDomain = domainMatcher.normalize(packageName)
-        }
-        val rawDomain = parsed.webDomain ?: mappedDomain
-        
-        if (rawDomain == null) {
-            Log.e("SecureVaultAutofill", "Cannot resolve domain safely for package: \$packageName. Aborting autofill.")
+        if (!hasUsername && !hasPassword) {
+            Log.d(TAG, "AUTOFILL_SUPPRESSED_REASON=no_relevant_fields package=$rawPackageName")
             callback.onSuccess(null)
             return
         }
-        
-        val normalizedDomain = domainMatcher.normalize(rawDomain) ?: rawDomain
-        
-        Log.i("SecureVaultAutofill", "Fill Request for: \$rawDomain -> \$normalizedDomain (\${packageName})")
-        
-        // --- MULTI-STEP LOGIN CACHE LOGIC (Fix A) ---
+
+        // ── 2. Resolve identity ──────────────────────────────────────────────
+        //
+        //   identityType="web"     → request came from a browser/WebView; use webDomain
+        //                            as the primary identity and normalize it via PSL.
+        //   identityType="package" → request came from a native app; use the Android
+        //                            package name as the identity.
+        //
+        //   IMPORTANT SECURITY NOTE: We do NOT use the item title as an identity key.
+        //   Titles are human labels, not cryptographic or verified identity anchors.
+        //   Fuzzy title matching would risk filling the wrong credential into the wrong app.
+        //
+        val webDomain = parsed.webDomain
+        val identityType: String
+        val rawIdentity: String
+
+        if (!webDomain.isNullOrBlank()) {
+            // Browser or WebView context: Android supplies the real domain from the URL bar.
+            rawIdentity = webDomain
+            identityType = "web"
+        } else if (rawPackageName.isNotEmpty()) {
+            // Native app context: no webDomain available; package name is the identity.
+            rawIdentity = rawPackageName
+            identityType = "package"
+        } else {
+            Log.e(TAG, "AUTOFILL_SUPPRESSED_REASON=no_identity (no webDomain, no packageName)")
+            callback.onSuccess(null)
+            return
+        }
+
+        // Normalize the identity to a canonical lookup key:
+        //   - "web": PSL-normalize the domain (e.g. "login.example.com" → "example.com")
+        //   - "package": map to known domain (e.g. "com.instagram.android" → "instagram.com")
+        //                or fall back to the package name itself (enables matching items saved
+        //                by the autofill-save path which stores the package as the URI).
+        val normalizedIdentity: String = when (identityType) {
+            "web"     -> domainMatcher.normalize(rawIdentity) ?: rawIdentity
+            else      -> domainMatcher.getAppMapping(rawPackageName) ?: rawPackageName
+        }
+
+        Log.i(TAG, "AUTOFILL_IDENTITY_RESOLVED type=$identityType raw=$rawIdentity " +
+                "normalized=$normalizedIdentity package=$rawPackageName")
+
+        // ── 3. Multi-step login guard ────────────────────────────────────────
+        //
+        //   For WEB contexts only: many login flows are split across two pages
+        //   (username page → password page). Track the username seen on step 1
+        //   in a short-lived session cache (60 s TTL), so on step 2 (password-only)
+        //   we can fill the right credential and avoid phishing risks on naked
+        //   password forms.
+        //
+        //   For NATIVE APP contexts: multi-step web-style forms do not apply.
+        //   Native apps frequently show a single password field with no username.
+        //   Suppressing autofill here would break virtually all native app logins.
+        //
+        val isWebContext = (identityType == "web")
         var cachedUsername: String? = null
-        
+
         if (hasUsername && !hasPassword) {
-            // It's a username-only page (Step 1). Cache it temporarily.
-            // We just grab the first node's text if it has any, but usually we just want to know
-            // we *were* on a username page for this domain. We'll cache a placeholder if empty to represent intent.
-            val usernameStr = parsed.usernameNodes.first().text?.toString() ?: ""
-            LoginSessionCache.put(normalizedDomain, packageName, usernameStr)
+            // Step 1 of a possible multi-step web flow: store username for later
+            if (isWebContext) {
+                val usernameText = parsed.usernameNodes.first().text?.toString() ?: ""
+                LoginSessionCache.put(normalizedIdentity, rawPackageName, usernameText)
+                Log.d(TAG, "LoginSessionCache: stored username context for $normalizedIdentity")
+            }
         } else if (hasPassword && !hasUsername) {
-            // It's a password-only page (Step 2). Check the cache.
-            cachedUsername = LoginSessionCache.get(normalizedDomain, packageName)
-            
-            // SECURITY CHECK: If password-only and no cached username context, abort.
-            // This prevents malicious apps from just throwing up a password field to trick the manager.
-            if (cachedUsername == null) {
-                Log.w("SecureVaultAutofill", "SECURITY: Password-only form detected without prior username context. Aborting fill to prevent phishing.")
-                TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.FILL_FAILURE, normalizedDomain, mapOf("reason" to "naked_password_form"))
-                callback.onSuccess(null)
-                return
+            if (isWebContext) {
+                // Web context: require prior step-1 username to prevent phishing
+                cachedUsername = LoginSessionCache.get(normalizedIdentity, rawPackageName)
+                if (cachedUsername == null) {
+                    Log.w(TAG, "AUTOFILL_SUPPRESSED_REASON=naked_password_web_no_cache " +
+                            "identity=$normalizedIdentity")
+                    callback.onSuccess(null)
+                    return
+                }
+                Log.i(TAG, "LoginSessionCache: restored username context for " +
+                        "$normalizedIdentity (multi-step web flow)")
             } else {
-                Log.i("SecureVaultAutofill", "Restored username context from cache for multi-step login")
+                // RC3: Native app context — skip the session cache guard entirely.
+                Log.i(TAG, "AUTOFILL: password-only native app screen; " +
+                        "skipping session cache check (identity=$normalizedIdentity)")
             }
         }
 
-        // 3. Check Blocklist
-        val prefs = applicationContext.getSharedPreferences("SecureVaultSettings", Context.MODE_PRIVATE)
+        // ── 4. Check autofill blocklist ──────────────────────────────────────
+        val prefs = applicationContext.getSharedPreferences(
+            "SecureVaultSettings", Context.MODE_PRIVATE
+        )
         val blocklist = prefs.getStringSet("autofillBlocklist", emptySet()) ?: emptySet()
-        if (blocklist.contains(normalizedDomain)) {
-            Log.i("SecureVaultAutofill", "Domain \$normalizedDomain is blocked by user. Aborting autofill.")
-            TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.FILL_FAILURE, normalizedDomain, mapOf("reason" to "blocked_domain"))
+        if (blocklist.contains(normalizedIdentity)) {
+            Log.i(TAG, "AUTOFILL_SUPPRESSED_REASON=blocked_domain identity=$normalizedIdentity")
             callback.onSuccess(null)
             return
         }
 
-        // 4. Search Vault and Ensure Unlocked
+        // ── 5. Vault lock / unlock dispatch ─────────────────────────────────
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // If Vault is locked, return an authentication Dataset
                 if (!BiometricVaultUnlocker.isVaultUnlocked()) {
-                    Log.i("SecureVaultAutofill", "Vault is locked. Returning Biometric Authentication Dataset.")
-                    TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.BIOMETRIC_PROMPT_SHOWN, normalizedDomain)
-                    val intent = Intent(this@SecureVaultAutofillService, UnlockVaultActivity::class.java).apply {
-                        putExtra("DOMAIN", normalizedDomain)
+                    // Vault is locked: present an authentication intent.
+                    // This is the explicit, non-silent path — the user will be prompted.
+                    Log.i(TAG, "AUTOFILL_VAULT_LOCKED: returning authentication intent " +
+                            "identity=$normalizedIdentity")
 
-                        // Pass along the IDs of the fields we want to fill upon success
+                    val unlockIntent = Intent(
+                        this@SecureVaultAutofillService,
+                        UnlockVaultActivity::class.java
+                    ).apply {
+                        putExtra("DOMAIN", normalizedIdentity)
+                        putExtra("IDENTITY_TYPE", identityType)
                         val uIds = parsed.usernameNodes.mapNotNull { it.autofillId }
                         val pIds = parsed.passwordNodes.mapNotNull { it.autofillId }
                         putParcelableArrayListExtra("USERNAME_IDS", ArrayList(uIds))
-                        putParcelableArrayListExtra("PASSWORD_IDS", ArrayList(pIds))
+                        putParcelableArrayListExtra("PASSWORD_IDS",  ArrayList(pIds))
                     }
 
                     val pendingIntent = PendingIntent.getActivity(
                         this@SecureVaultAutofillService,
                         1001,
-                        intent,
+                        unlockIntent,
                         PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
                     )
 
-                    val presentation = RemoteViews(packageName, android.R.layout.simple_list_item_1)
-                    presentation.setTextViewText(android.R.id.text1, "Unlock SecureVault")
+                    val presentation = RemoteViews(
+                        packageName, android.R.layout.simple_list_item_1
+                    )
+                    presentation.setTextViewText(
+                        android.R.id.text1, "\uD83D\uDD10 Unlock SecureVault"
+                    )
 
-                    // Create an Authentication Response
+                    val autofillIds = (
+                        parsed.usernameNodes.mapNotNull { it.autofillId } +
+                        parsed.passwordNodes.mapNotNull { it.autofillId }
+                    ).toTypedArray()
+
                     val response = FillResponse.Builder()
-                        .setAuthentication(
-                            parsed.usernameNodes.mapNotNull { it.autofillId }.toTypedArray(),
-                            pendingIntent.intentSender,
-                            presentation
-                        )
+                        .setAuthentication(autofillIds, pendingIntent.intentSender, presentation)
                         .build()
 
                     callback.onSuccess(response)
                     return@launch
                 }
 
-                // If Vault is unlocked, fetch and decrypt matches
-                val matches = vaultRepository.findByDomain(normalizedDomain)
+                // ── 6. Vault unlocked: find matching credentials ─────────────
+                val matches: List<VaultItemEntity> = vaultRepository.findByDomain(normalizedIdentity)
+                Log.i(TAG, "AUTOFILL_MATCH_COUNT identity=$normalizedIdentity count=${matches.size}")
 
-                // SECURITY: Filter out weak domain matches (confidence < 0.8)
-                val trustedMatches = matches.filter { item ->
-                    val confidence = domainMatcher.calculateConfidence(rawDomain, item.uris)
-                    if (confidence < 0.8) {
-                        Log.w("SecureVaultAutofill", "Filtered out match ${item.title} due to low confidence: $confidence")
+                // Security: For web contexts, filter out low-confidence domain matches.
+                // For package contexts, trust any match — the package name is an exact identity.
+                val trustedMatches: List<VaultItemEntity> = if (isWebContext) {
+                    matches.filter { item ->
+                        val confidence = domainMatcher.calculateConfidence(rawIdentity, item.uris)
+                        if (confidence < 0.8) {
+                            Log.w(TAG, "AUTOFILL_SUPPRESSED_REASON=low_confidence_match " +
+                                    "itemId=${item.id} confidence=$confidence " +
+                                    "identity=$normalizedIdentity")
+                        }
+                        confidence >= 0.8
                     }
-                    confidence >= 0.8
+                } else {
+                    matches // Package identity match — exact; no confidence filtering needed
                 }
 
                 if (trustedMatches.isEmpty()) {
-                    Log.i("SecureVaultAutofill", "No matching credentials found for domain: $normalizedDomain")
-                    TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.UNMATCHED_DOMAIN, normalizedDomain)
-
-                    // Return empty response with just the SaveInfo so we can still save new credentials!
+                    Log.i(TAG, "AUTOFILL_SUPPRESSED_REASON=no_matching_credentials " +
+                            "identity=$normalizedIdentity type=$identityType")
                     val saveInfo = autofillHelper.getSaveInfo(parsed)
                     val responseBuilder = FillResponse.Builder()
-                    if (saveInfo != null) {
-                        responseBuilder.setSaveInfo(saveInfo)
-                    }
+                    if (saveInfo != null) responseBuilder.setSaveInfo(saveInfo)
                     callback.onSuccess(responseBuilder.build())
                     return@launch
                 }
 
-                val dek = BiometricVaultUnlocker.getUnlockedDek() ?: throw IllegalStateException("Unlocked DEK is null")
-                val secretKey: Key = SecretKeySpec(dek, "AES")
-
-                // 5. Build Dataset Response
-                val responseBuilder = FillResponse.Builder()
-
-                // Filter matches if we are in a multi-step password page and have a cached username.
-                // We only want to suggest the vault item that matches the cached username to avoid confusion.
-                val filteredMatches = if (cachedUsername != null && cachedUsername.isNotBlank()) {
-                    trustedMatches.filter { it.username.equals(cachedUsername, ignoreCase = true) }.ifEmpty { trustedMatches }
+                // ── 7. Build the fill response ───────────────────────────────
+                // Narrow by the cached username in web multi-step flows
+                val filteredMatches: List<VaultItemEntity> = if (!cachedUsername.isNullOrBlank()) {
+                    trustedMatches
+                        .filter { it.username.equals(cachedUsername, ignoreCase = true) }
+                        .ifEmpty { trustedMatches }
                 } else {
                     trustedMatches
                 }
-
-                // Sort by Most Recently Used (MRU)
                 val sortedMatches = filteredMatches.sortedByDescending { it.updatedAt }
+
+                val responseBuilder = FillResponse.Builder()
+                var datasetCount = 0
 
                 for (item in sortedMatches) {
                     val datasetBuilder = Dataset.Builder()
+                    val presentation = RemoteViews(
+                        packageName, android.R.layout.simple_list_item_1
+                    )
+                    presentation.setTextViewText(
+                        android.R.id.text1,
+                        item.username.ifEmpty { item.title }.ifEmpty { "SecureVault" }
+                    )
 
-                    // Creates a simple dropdown presentation
-                    val presentation = RemoteViews(packageName, android.R.layout.simple_list_item_1)
-                    presentation.setTextViewText(android.R.id.text1, item.username.ifEmpty { item.title })
+                    var datasetUsable = false
 
-                    // Fill Username
+                    // Fill username fields
                     for (node in parsed.usernameNodes) {
-                        datasetBuilder.setValue(
-                            node.autofillId!!,
-                            AutofillValue.forText(item.username),
-                            presentation
-                        )
-                    }
-
-                    // Fill Password
-                    var decryptedPassword = ""
-                    try {
-                        val parts = item.encryptedPassword.split(":")
-                        if (parts.size == 2) {
-                            val iv = Base64.decode(parts[0], Base64.DEFAULT)
-                            val ciphertext = Base64.decode(parts[1], Base64.DEFAULT)
-                            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                            cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-                            val plaintextBytes = cipher.doFinal(ciphertext)
-                            decryptedPassword = String(plaintextBytes, Charsets.UTF_8)
-                        } else {
-                           Log.w("SecureVaultAutofill", "Invalid encrypted password format for ${item.id}")
+                        node.autofillId?.let { id ->
+                            datasetBuilder.setValue(
+                                id, AutofillValue.forText(item.username), presentation
+                            )
+                            datasetUsable = true
                         }
-                    } catch (e: Exception) {
-                        Log.e("SecureVaultAutofill", "Failed to decrypt password for ${item.id}", e)
-                        TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.FILL_FAILURE, normalizedDomain, mapOf("reason" to "decryption_failed", "itemId" to item.id, "message" to (e.message ?: "unknown")))
                     }
 
-                    if (decryptedPassword.isNotEmpty()) {
+                    // ── RC1 FIX: item.password is PLAINTEXT stored in the SQLCipher DB ───
+                    //
+                    // The native DB password field holds plaintext received from the JS vault
+                    // at sync time (when the JS vault is already decrypted in memory).
+                    // The SQLCipher database file is the encryption boundary.
+                    //
+                    // REMOVED: Previous code incorrectly attempted AES-GCM decryption of
+                    // this plaintext value using BiometricVaultUnlocker.getUnlockedDek(),
+                    // which is an entirely different key. This always threw an exception
+                    // which was silently caught, resulting in decryptedPassword="" and
+                    // zero fills. That dead code path is not present in this version.
+                    // ────────────────────────────────────────────────────────────────────
+                    val passwordToFill = item.password
+                    if (passwordToFill.isNotEmpty()) {
                         for (node in parsed.passwordNodes) {
-                            // SECURITY CHECK: Ensure it's truly a password field before filling plain text
-                            val inputType = node.inputType
-                            val isPasswordVariation = (inputType and android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0 ||
-                                                      (inputType and android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD) != 0 ||
-                                                      (inputType and android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD) != 0
-                            
-                            val combinedHints = "\${node.hint} \${node.contentDescription} \${node.idEntry}".lowercase()
-                            val hintLooksLikePassword = combinedHints.contains("password") || combinedHints.contains("passcode") || combinedHints.contains("pin")
-                            
-                            if (isPasswordVariation || hintLooksLikePassword) {
+                            node.autofillId?.let { id ->
                                 datasetBuilder.setValue(
-                                    node.autofillId!!,
-                                    AutofillValue.forText(decryptedPassword),
-                                    presentation
+                                    id, AutofillValue.forText(passwordToFill), presentation
                                 )
-                            } else {
-                                Log.w("SecureVaultAutofill", "Skipping fill on suspected non-password field: \$combinedHints")
+                                datasetUsable = true
                             }
                         }
+                    } else {
+                        // Password field is empty in the native DB — this means the item was
+                        // synced before this fix (when the JS encrypted string was stored).
+                        // The user should unlock and re-lock the vault app to trigger a fresh
+                        // sync. We log this as a warning but do NOT throw.
+                        Log.w(TAG, "AUTOFILL: empty password for itemId=${item.id} " +
+                                "— user should re-sync vault (open SecureVault while unlocked)")
                     }
 
-                    responseBuilder.addDataset(datasetBuilder.build())
+                    if (datasetUsable) {
+                        responseBuilder.addDataset(datasetBuilder.build())
+                        datasetCount++
+                    }
                 }
 
-                // Set SaveInfo to prompt the user if they submit a new password
                 val saveInfo = autofillHelper.getSaveInfo(parsed)
-                if (saveInfo != null) {
-                    responseBuilder.setSaveInfo(saveInfo)
-                }
+                if (saveInfo != null) responseBuilder.setSaveInfo(saveInfo)
 
-                // We parsed successfully, added the Dataset
-                Log.i("SecureVaultAutofill", "FillResponse built with ${sortedMatches.size} items.")
-                TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.FILL_SUCCESS, normalizedDomain, mapOf("matches" to sortedMatches.size))
+                Log.i(TAG, "AUTOFILL_FILL_RESPONSE_SENT identity=$normalizedIdentity " +
+                        "datasetCount=$datasetCount")
                 callback.onSuccess(responseBuilder.build())
 
             } catch (e: Exception) {
-                Log.e("SecureVaultAutofill", "Error processing fill request", e)
-                TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.FILL_FAILURE, normalizedDomain, mapOf("reason" to "exception", "message" to (e.message ?: "unknown")))
-                callback.onFailure(e.message)
+                // Explicit, non-silent failure. We log a reason code but never log secrets.
+                Log.e(TAG, "AUTOFILL_SUPPRESSED_REASON=exception " +
+                        "message=${e.message?.take(120)}", e)
+                callback.onFailure("autofill_exception")
             }
         }
     }
 
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
-        Log.i("SecureVaultAutofill", "Received Save Request")
-        val context = request.fillContexts.lastOrNull()
+        Log.i(TAG, "AUTOFILL_SAVE_REQUEST_RECEIVED")
 
-        if (context == null) {
-            Log.e("SecureVaultAutofill", "Save request context is null")
-            TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.SAVE_FAILURE, null, mapOf("reason" to "context_null"))
-            callback.onFailure("Context is null")
+        val fillContext = request.fillContexts.lastOrNull()
+        if (fillContext == null) {
+            Log.e(TAG, "AUTOFILL_SAVE: context is null")
+            callback.onFailure("save_no_context")
             return
         }
 
-        val structure = context.structure
+        val structure = fillContext.structure
         val parsed = autofillHelper.parseStructure(structure)
+        val rawPackageName = structure.activityComponent?.packageName ?: ""
+
+        // Resolve save identity (same logic as fill request)
+        val webDomain = parsed.webDomain
+        val identityType: String
+        val rawIdentity: String
+        if (!webDomain.isNullOrBlank()) {
+            rawIdentity = webDomain
+            identityType = "web"
+        } else if (rawPackageName.isNotEmpty()) {
+            rawIdentity = rawPackageName
+            identityType = "package"
+        } else {
+            Log.e(TAG, "AUTOFILL_SAVE: cannot resolve identity — no webDomain or package")
+            callback.onFailure("save_no_identity")
+            return
+        }
+
+        val normalizedIdentity = when (identityType) {
+            "web" -> domainMatcher.normalize(rawIdentity) ?: rawIdentity
+            else  -> domainMatcher.getAppMapping(rawPackageName) ?: rawPackageName
+        }
+
+        Log.i(TAG, "AUTOFILL_SAVE: identity=$normalizedIdentity type=$identityType")
 
         val usernameNode = parsed.usernameNodes.firstOrNull()
-        val passwordNode = parsed.passwordNodes.firstOrNull()
-
-        val packageName = structure.activityComponent?.packageName ?: ""
-        
-        var mappedDomain: String? = null
-        if (packageName.isNotEmpty()) {
-            mappedDomain = domainMatcher.normalize(packageName)
-        }
-        val rawDomain = parsed.webDomain ?: mappedDomain
-        
-        if (rawDomain == null) {
-            Log.e("SecureVaultAutofill", "Cannot resolve domain safely on save. Aborting.")
-            callback.onFailure("Cannot resolve domain")
-            return
-        }
-        val normalizedDomain = domainMatcher.normalize(rawDomain) ?: rawDomain
-
-        TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.SAVE_REQUEST, normalizedDomain)
+        val passwordNode  = parsed.passwordNodes.firstOrNull()
 
         if (passwordNode == null) {
-            Log.e("SecureVaultAutofill", "No password field found to save")
-            TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.SAVE_FAILURE, normalizedDomain, mapOf("reason" to "no_password_field"))
-            callback.onFailure("No password field found to save")
+            Log.w(TAG, "AUTOFILL_SAVE: no password field — cannot save")
+            callback.onFailure("save_no_password_field")
             return
         }
 
-        // Fix A: Check cache for username if it's a password-only save
         var username = usernameNode?.text?.toString() ?: ""
         if (username.isEmpty()) {
-            val cachedUsername = LoginSessionCache.get(normalizedDomain, packageName)
-            if (!cachedUsername.isNullOrBlank()) {
-                username = cachedUsername
-                Log.i("SecureVaultAutofill", "Restored username from cache for SaveRequest")
-                LoginSessionCache.clear(normalizedDomain, packageName)
+            val cached = LoginSessionCache.get(normalizedIdentity, rawPackageName)
+            if (!cached.isNullOrBlank()) {
+                username = cached
+                LoginSessionCache.clear(normalizedIdentity, rawPackageName)
+                Log.d(TAG, "AUTOFILL_SAVE: restored username from session cache")
             }
         }
-        val password = passwordNode.text?.toString() ?: ""
+
+        val plaintextPassword = passwordNode.text?.toString() ?: ""
 
         if (!BiometricVaultUnlocker.isVaultUnlocked()) {
-            Log.e("SecureVaultAutofill", "Vault is locked, cannot save")
-            TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.SAVE_FAILURE, normalizedDomain, mapOf("reason" to "vault_locked"))
-            callback.onFailure("Vault is locked, cannot save")
+            // Require recent user authentication before allowing a save.
+            // This prevents rogue autofill saves when the session has timed out.
+            Log.w(TAG, "AUTOFILL_SAVE: vault locked — refusing save for identity=$normalizedIdentity")
+            callback.onFailure("save_vault_locked")
             return
         }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val dek = BiometricVaultUnlocker.getUnlockedDek() ?: throw IllegalStateException("Unlocked DEK is null")
-                val secretKey: Key = SecretKeySpec(dek, "AES")
-
-                // Encrypt the new password
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-                val iv = cipher.iv
-                val encryptedBytes = cipher.doFinal(password.toByteArray(Charsets.UTF_8))
-
-                val ivB64 = Base64.encodeToString(iv, Base64.NO_WRAP)
-                val encB64 = Base64.encodeToString(encryptedBytes, Base64.NO_WRAP)
-                val encryptedPasswordString = "$ivB64:$encB64"
-
-                val newItem = com.mohdj.securevault.vault.VaultItemEntity(
-                    id = java.util.UUID.randomUUID().toString(),
-                    title = normalizedDomain,
-                    username = username,
-                    encryptedPassword = encryptedPasswordString,
-                    uris = normalizedDomain,
-                    type = "Website",
+                // RC1: Store plaintext password in SQLCipher-protected DB.
+                // This matches the JS→native sync path. See VaultItemEntity security docs.
+                val newItem = VaultItemEntity(
+                    id        = java.util.UUID.randomUUID().toString(),
+                    title     = normalizedIdentity,
+                    username  = username,
+                    password  = plaintextPassword,
+                    uris      = normalizedIdentity,
+                    type      = if (identityType == "web") "Website" else "App",
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis(),
                     deletedAt = null
                 )
-
                 vaultRepository.insert(newItem)
-                Log.i("SecureVaultAutofill", "Successfully saved new credential for $normalizedDomain")
-                TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.SAVE_SUCCESS, normalizedDomain)
+                Log.i(TAG, "AUTOFILL_SAVE_SUCCESS identity=$normalizedIdentity")
                 callback.onSuccess()
             } catch (e: Exception) {
-                Log.e("SecureVaultAutofill", "Failed to save credential", e)
-                TelemetryLogger.logEvent(applicationContext, TelemetryLogger.EventType.SAVE_FAILURE, normalizedDomain, mapOf("reason" to "exception", "message" to (e.message ?: "unknown")))
-                callback.onFailure("Save error: ${e.message}")
+                Log.e(TAG, "AUTOFILL_SAVE: exception message=${e.message?.take(120)}", e)
+                callback.onFailure("save_exception")
             }
         }
     }
