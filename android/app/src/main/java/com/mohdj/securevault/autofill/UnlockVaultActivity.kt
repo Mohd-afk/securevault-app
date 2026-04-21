@@ -24,7 +24,7 @@ import android.view.autofill.AutofillValue
 import android.widget.RemoteViews
 import android.widget.Toast
 import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import com.mohdj.securevault.security.BiometricKeyManager
@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "UnlockVaultActivity"
 
-class UnlockVaultActivity : AppCompatActivity() {
+class UnlockVaultActivity : FragmentActivity() {
 
     private var domain: String = ""
 

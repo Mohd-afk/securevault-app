@@ -1,0 +1,61 @@
+Viewed package.json:1-85
+
+That is a great question. Since you are using **Capacitor** with React/Vite, you have a massive advantage: your app consists of a "Native Shell" (the APK part) and a "Web Bundle" (your HTML, CSS, JS). 
+
+For 95% of your updates (UI changes, new features, bug fixes), you **only need to update the Web Bundle**. You only need a new APK if you add a new native plugin (like a barcode scanner or native biometrics).
+
+Here is the best, near-zero-cost workflow to deliver updates instantly without forcing users to download and install a new APK every time.
+
+---
+
+### Route 1: Over-The-Air (OTA) Updates via Capgo (Highly Recommended)
+[Capgo](https://capgo.app/) is the modern standard for Capacitor OTA updates. It allows you to push updates directly to your users' devices in the background.
+
+**How it works:**
+1. You build your app (`npm run build`).
+2. You push the update using the Capgo CLI to their servers.
+3. When your users open the app, it downloads the update in the background.
+4. The next time they open the app, it instantly swaps to the new version.
+
+**Cost:** They have a very generous free tier (perfect for starting out) and open-source self-hosting options if you want to run it completely free on a cheap VPS later.
+
+**Setup Workflow:**
+1. Install the plugin: `npm i @capacitor-updater/core`
+2. Sync capacitor: `npx cap sync`
+3. Add a few lines of code to your `index.tsx` or `App.tsx` to tell the app to check for updates on startup.
+4. To release an update, you just type: `npx capgo upload` in your terminal.
+
+---
+
+### Route 2: The Progressive Web App (PWA) Route (100% Free, No APK Needed)
+Since you are bypassing the Play Store entirely, you might want to consider skipping the APK distribution altogether. Capacitor apps are just web apps at their core.
+
+**How it works:**
+1. You deploy your app to **Firebase Hosting** (which is free/extremely cheap).
+2. Users visit your app's URL on their phone's browser (Chrome/Safari).
+3. They get a prompt to **"Add to Home Screen"**.
+4. The app installs to their phone, gets an app icon, and opens fullscreen exactly like a native app.
+
+**Why this is perfect for your situation:**
+* **Zero Cost:** Firebase Hosting is essentially free for small/medium user bases.
+* **Instant Updates:** The moment you run `firebase deploy`, every user gets the new version the next time they open the app. No update servers, no background downloads required.
+* **Safer Distribution:** You don't have to convince users to bypass Android's scary "Install Unknown Apps" security warnings to sideload your APK.
+
+### Route 3: In-App "Update Available" Prompt (Manual APK download)
+If you strictly want to stick to distributing APKs but want to make it easier for users to know there's an update:
+1. Store a "latest_version" document in your Firestore database or a static `version.json` file on Firebase Hosting.
+2. When the app starts, it fetches this file and compares it to its current version.
+3. If a newer version exists, show a nice popup inside your app: *"A new update is available! [Download Now]"*.
+4. The button links directly to your server or a Google Drive link where the new `.apk` is hosted.
+
+**Cost:** 100% Free.
+**Downside:** The user still has to click download and go through the Android install prompt, but at least they are notified immediately inside the app.
+
+---
+
+**My Recommendation:**  
+If your app absolutely needs native features (like native FaceID/Biometrics), go with **Route 1 (Capgo)**. It gives you the "magic" update experience where the app just fixes itself silently. 
+
+If your app doesn't rely heavily on low-level native hardware features, definitely go with **Route 2 (PWA)**. It is the easiest, cheapest, and most friction-free way to distribute a web-based app outside of the App Stores.
+
+Which route sounds most appealing to the experience you want to provide? I can walk you through the exact setup steps for the one you choose.
