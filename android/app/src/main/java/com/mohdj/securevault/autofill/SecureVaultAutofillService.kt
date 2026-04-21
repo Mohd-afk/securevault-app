@@ -198,9 +198,9 @@ class SecureVaultAutofillService : AutofillService() {
 
                     val pendingIntent = PendingIntent.getActivity(
                         this@SecureVaultAutofillService,
-                        1001,
+                        normalizedIdentity.hashCode(),
                         unlockIntent,
-                        PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     )
 
                     val presentation = RemoteViews(

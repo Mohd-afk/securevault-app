@@ -188,12 +188,26 @@ class UnlockVaultActivity : FragmentActivity() {
 
         if (matches.isEmpty()) {
             Log.w(TAG, "No matches found for domain=$domain after unlock")
-            runOnUiThread { finish() }
+            runOnUiThread {
+                Toast.makeText(this@UnlockVaultActivity, "No saved passwords found for $domain", Toast.LENGTH_SHORT).show()
+                setResult(Activity.RESULT_CANCELED)
+                finish()
+            }
             return
         }
 
         val uIds = intent.getParcelableArrayListExtra<AutofillId>("USERNAME_IDS")
         val pIds = intent.getParcelableArrayListExtra<AutofillId>("PASSWORD_IDS")
+
+        if (uIds == null && pIds == null) {
+            Log.e(TAG, "AutofillIds are missing from intent!")
+            runOnUiThread {
+                Toast.makeText(this@UnlockVaultActivity, "Autofill error: missing field IDs", Toast.LENGTH_SHORT).show()
+                setResult(Activity.RESULT_CANCELED)
+                finish()
+            }
+            return
+        }
 
         val responseBuilder = FillResponse.Builder()
         var datasetCount = 0
@@ -237,6 +251,16 @@ class UnlockVaultActivity : FragmentActivity() {
             }
         }
 
+        if (datasetCount == 0) {
+            Log.w(TAG, "No usable datasets could be built for domain=$domain")
+            runOnUiThread {
+                Toast.makeText(this@UnlockVaultActivity, "No usable fields found for $domain", Toast.LENGTH_SHORT).show()
+                setResult(Activity.RESULT_CANCELED)
+                finish()
+            }
+            return
+        }
+
         val resultIntent = Intent().apply {
             putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, responseBuilder.build())
         }
@@ -245,6 +269,7 @@ class UnlockVaultActivity : FragmentActivity() {
                 "domain=$domain datasetCount=$datasetCount")
 
         runOnUiThread {
+            Toast.makeText(this@UnlockVaultActivity, "Unlocked! Tap field again if needed.", Toast.LENGTH_SHORT).show()
             setResult(Activity.RESULT_OK, resultIntent)
             finish()
         }
