@@ -5,20 +5,32 @@
 // This is SEPARATE from the OTA (Capgo) update system which handles JS-only
 // changes. This service handles native-level updates that require a full APK.
 //
-// Flow:
-//   1. Get app version via App.getInfo() (e.g. "3.1.0") — full semver
-//   2. Fetch min_apk_version + apk_download_url from Firestore
-//      min_apk_version can be stored as a string ("3.1.0") or a number (3)
-//   3. Compare using semver and return { updateRequired, downloadUrl? }
+// ─── ROOT CAUSE FIX (v3.2.6) ─────────────────────────────────────────────
+//
+// BUG 1 — "Update screen never appears":
+//   Previously used CapacitorUpdater.current().native for the version check.
+//   CapacitorUpdater.current().native returns the VERSION OF THE OTA BUNDLE,
+//   not the actual installed APK version. If the app received an OTA update
+//   to "3.3.1", the checker would read "3.3.1" and think no APK update is
+//   needed — even if the actual APK binary is still "3.2.4".
+//
+//   FIX: ALWAYS use App.getInfo().version which reads the versionName
+//   directly from the APK's build.gradle. This is the only reliable source
+//   for the native binary version.
+//
+// BUG 2 — "Update screen stays after installing new APK":
+//   The Firestore fetch was hitting Firestore's local SDK cache. After
+//   installing a new APK, the cache might still serve stale data.
+//   FIX: Use { source: 'server' } to force a fresh network fetch, bypassing
+//   the local Firestore cache entirely.
 //
 // NEVER throws — if anything fails, returns { updateRequired: false }
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDocFromServer } from 'firebase/firestore';
 import { getFirebaseDb } from '../firebase';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
-import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('APK_UPDATE');
@@ -93,49 +105,60 @@ export async function checkApkUpdateRequired(): Promise<ApkUpdateCheckResult> {
   }
 
   try {
-    // ── Step 1: Get installed native APK version via App.getInfo() ──────────
-    // App.getInfo() returns the versionName from build.gradle ("3.1.0"),
-    // which is the full semver that we must compare against min_apk_version.
-    // This is consistent with how updater.ts reads the native version.
-    let installedVersionRaw: string | null = null;
-
+    // ── Step 1: Get installed native APK version ─────────────────────────
+    //
+    // CRITICAL: Use App.getInfo().version — this reads the versionName field
+    // directly from the compiled APK (set in build.gradle). This is the ONLY
+    // reliable source for the native binary version.
+    //
+    // DO NOT use CapacitorUpdater.current().native — that value reflects the
+    // OTA bundle version, not the APK binary version. On a device that received
+    // an OTA update (e.g. "3.3.1"), that field would report "3.3.1" even if the
+    // underlying APK binary is still "3.2.4", causing the version check to
+    // incorrectly conclude no update is needed.
+    let installedVersion: string | null = null;
     try {
-      if (Capacitor.isPluginAvailable('CapacitorUpdater')) {
-        const updaterInfo = await CapacitorUpdater.current();
-        installedVersionRaw = updaterInfo.native ?? null;
-        log.info(`[APK_UPDATE] CapacitorUpdater.current().native = "${installedVersionRaw}"`);
-      }
-      
-      // Fallback to App.getInfo() if CapacitorUpdater didn't provide a native version
-      // or the plugin is entirely missing.
-      if (!installedVersionRaw) {
-        const appInfo = await App.getInfo();
-        installedVersionRaw = appInfo.version ?? null;
-        log.info(`[APK_UPDATE] App.getInfo().version = "${installedVersionRaw}"`);
-      }
+      const appInfo = await App.getInfo();
+      installedVersion = appInfo.version?.trim() ?? null;
+      log.info(`[APK_UPDATE] App.getInfo().version = "${installedVersion}" (APK binary version)`);
     } catch (e) {
-      log.warn('[APK_UPDATE] Failed to determine installed version:', e);
+      log.warn('[APK_UPDATE] App.getInfo() failed:', e);
     }
 
-    if (!installedVersionRaw) {
+    if (!installedVersion) {
       log.warn('[APK_UPDATE] Could not determine installed APK version — skipping check');
       return { updateRequired: false };
     }
 
-    // Ensure it is parseable
-    const installedParts = installedVersionRaw.trim().split('.').map(Number);
-    if (installedParts.length === 0 || isNaN(installedParts[0])) {
-      log.warn(`[APK_UPDATE] Unparseable version string "${installedVersionRaw}" — skipping check`);
+    // Validate parseable semver
+    const parts = installedVersion.split('.').map(Number);
+    if (parts.length === 0 || isNaN(parts[0])) {
+      log.warn(`[APK_UPDATE] Unparseable version string "${installedVersion}" — skipping check`);
       return { updateRequired: false };
     }
 
-    const installedVersion = installedVersionRaw.trim();
     log.info(`[APK_UPDATE] Installed APK version: "${installedVersion}"`);
 
-    // ── Step 2: Fetch Firestore version document ─────────────────────────
+    // ── Step 2: Fetch Firestore version document (always from server) ────
+    //
+    // CRITICAL: Use getDocFromServer() instead of getDoc().
+    // getDoc() may serve stale data from the Firestore SDK local cache.
+    // After the user installs a new APK, the old version of the JS bundle
+    // (still running from the previous OTA) might cache the old Firestore
+    // document. getDocFromServer() bypasses the local cache entirely and
+    // always fetches the current value from Firestore servers.
     const db = getFirebaseDb();
     const versionRef = doc(db, VERSION_DOC_PATH, VERSION_DOC_ID);
-    const snapshot = await getDoc(versionRef);
+    
+    let snapshot;
+    try {
+      snapshot = await getDocFromServer(versionRef);
+      log.info('[APK_UPDATE] Fetched version document fresh from Firestore server (cache bypassed)');
+    } catch (networkErr) {
+      // Network unavailable — fail open (don't block user)
+      log.warn('[APK_UPDATE] Could not reach Firestore server — skipping check (offline?):', networkErr);
+      return { updateRequired: false };
+    }
 
     if (!snapshot.exists()) {
       log.warn('[APK_UPDATE] Firestore version document does not exist — skipping check');
@@ -146,7 +169,8 @@ export async function checkApkUpdateRequired(): Promise<ApkUpdateCheckResult> {
     const rawMinApkVersion = data?.min_apk_version;
     const apkDownloadUrl: string | undefined = data?.apk_download_url;
 
-    log.info(`[APK_UPDATE] Firestore raw min_apk_version: ${JSON.stringify(rawMinApkVersion)}, type: ${typeof rawMinApkVersion}`);
+    log.info(`[APK_UPDATE] Firestore min_apk_version: ${JSON.stringify(rawMinApkVersion)} (type: ${typeof rawMinApkVersion})`);
+    log.info(`[APK_UPDATE] Firestore apk_download_url: ${apkDownloadUrl}`);
 
     const minApkVersion = normaliseMinVersion(rawMinApkVersion);
 
@@ -155,15 +179,16 @@ export async function checkApkUpdateRequired(): Promise<ApkUpdateCheckResult> {
       return { updateRequired: false };
     }
 
-    log.info(`[APK_UPDATE] Normalised min_apk_version: "${minApkVersion}", installed: "${installedVersion}"`);
+    log.info(`[APK_UPDATE] Comparing: installed="${installedVersion}" vs required>="${minApkVersion}"`);
 
-    // ── Step 3: Compare and return result ────────────────────────────────
+    // ── Step 3: Compare and return result ──────────────────────────────
     if (compareVersions(installedVersion, minApkVersion) < 0) {
       log.warn(`[APK_UPDATE] UPDATE REQUIRED — installed: "${installedVersion}", required: ">= ${minApkVersion}"`);
-      return {
-        updateRequired: true,
-        downloadUrl: apkDownloadUrl || 'https://github.com/Mohd-afk/securevault-app/releases/latest',
-      };
+      // Normalise the download URL to the current (renamed) repo
+      const url = (apkDownloadUrl || '')
+        .replace('securevault-app', 'Keeguard') // fix old repo name
+        || 'https://github.com/Mohd-afk/Keeguard/releases/latest';
+      return { updateRequired: true, downloadUrl: url };
     }
 
     log.info(`[APK_UPDATE] APK version OK (installed: "${installedVersion}" >= required: "${minApkVersion}")`);

@@ -22,7 +22,7 @@ admin.initializeApp({
 const db = admin.firestore();
 await db.collection('app_config').doc('latest_version').set({
   min_apk_version: version,
-  apk_download_url: `https://github.com/Mohd-afk/securevault-app/releases/download/v${version}/app-debug.apk`
+  apk_download_url: `https://github.com/Mohd-afk/Keeguard/releases/download/v${version}/app-debug.apk`
 }, { merge: true });
 
 console.log(`Successfully updated Firestore min_apk_version to ${version}`);
