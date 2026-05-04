@@ -49,7 +49,11 @@
         <activity
             android:name=".autofill.UnlockVaultActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:exported="false" />
+            android:exported="false"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:showOnLockScreen="true"
+            android:launchMode="singleInstance" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

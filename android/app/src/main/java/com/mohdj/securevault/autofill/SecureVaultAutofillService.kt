@@ -188,6 +188,18 @@ class SecureVaultAutofillService : AutofillService() {
                         this@SecureVaultAutofillService,
                         UnlockVaultActivity::class.java
                     ).apply {
+                        // FLAG_ACTIVITY_NEW_TASK is REQUIRED for activities started from
+                        // a Service context (AutofillService). Without it, the Activity
+                        // cannot be launched and Android falls back to the home screen.
+                        //
+                        // FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS prevents the transparent
+                        // unlock overlay from polluting the user's recents list.
+                        //
+                        // FLAG_ACTIVITY_BROUGHT_TO_FRONT keeps the biometric prompt
+                        // visually on top of the app being autofilled.
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                                Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
                         putExtra("DOMAIN", normalizedIdentity)
                         putExtra("IDENTITY_TYPE", identityType)
                         val uIds = parsed.usernameNodes.mapNotNull { it.autofillId }

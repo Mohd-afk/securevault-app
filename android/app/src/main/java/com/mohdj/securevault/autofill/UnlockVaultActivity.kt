@@ -77,7 +77,7 @@ class UnlockVaultActivity : FragmentActivity() {
                             domain,
                             mapOf("reason" to "crypto_object_null")
                         )
-                        finish()
+                        finishAndRemoveTask()
                         return
                     }
 
@@ -118,7 +118,7 @@ class UnlockVaultActivity : FragmentActivity() {
                             domain,
                             mapOf("reason" to "unwrap_failed", "message" to (e.message?.take(80) ?: "unknown"))
                         )
-                        finish()
+                        finishAndRemoveTask()
                     }
                 }
 
@@ -133,7 +133,7 @@ class UnlockVaultActivity : FragmentActivity() {
                         domain,
                         mapOf("error_code" to errorCode, "error_string" to errString.toString())
                     )
-                    finish()
+                    finishAndRemoveTask()
                 }
 
                 override fun onAuthenticationFailed() {
@@ -191,7 +191,7 @@ class UnlockVaultActivity : FragmentActivity() {
             runOnUiThread {
                 Toast.makeText(this@UnlockVaultActivity, "No saved passwords found for $domain", Toast.LENGTH_SHORT).show()
                 setResult(Activity.RESULT_CANCELED)
-                finish()
+                finishAndRemoveTask()
             }
             return
         }
@@ -204,7 +204,7 @@ class UnlockVaultActivity : FragmentActivity() {
             runOnUiThread {
                 Toast.makeText(this@UnlockVaultActivity, "Autofill error: missing field IDs", Toast.LENGTH_SHORT).show()
                 setResult(Activity.RESULT_CANCELED)
-                finish()
+                finishAndRemoveTask()
             }
             return
         }
@@ -256,7 +256,7 @@ class UnlockVaultActivity : FragmentActivity() {
             runOnUiThread {
                 Toast.makeText(this@UnlockVaultActivity, "No usable fields found for $domain", Toast.LENGTH_SHORT).show()
                 setResult(Activity.RESULT_CANCELED)
-                finish()
+                finishAndRemoveTask()
             }
             return
         }
@@ -269,14 +269,13 @@ class UnlockVaultActivity : FragmentActivity() {
                 "domain=$domain datasetCount=$datasetCount")
 
         runOnUiThread {
-            Toast.makeText(this@UnlockVaultActivity, "Unlocked! Tap field again if needed.", Toast.LENGTH_SHORT).show()
             setResult(Activity.RESULT_OK, resultIntent)
-            finish()
+            finishAndRemoveTask()
         }
     }
 
     private fun finishWithCancel() {
         setResult(RESULT_CANCELED)
-        finish()
+        finishAndRemoveTask()
     }
 }
