@@ -241,15 +241,24 @@ class SecureVaultAutofillService : AutofillService() {
 
                 // Security: For web contexts, filter out low-confidence domain matches.
                 // For package contexts, trust any match — the package name is an exact identity.
+                //
+                // IMPORTANT: item.uris is stored as a JSON array string, e.g.:
+                //   '["https://id.dreamapply.com"]'
+                // We must parse each URI individually and take the BEST confidence score.
+                // Previously, the raw JSON string was passed directly to calculateConfidence()
+                // which tried to normalize '["https://...]' as a URL → returned null → 0.0
+                // confidence → ALL matches silently discarded.
                 val trustedMatches: List<VaultItemEntity> = if (isWebContext) {
                     matches.filter { item ->
-                        val confidence = domainMatcher.calculateConfidence(rawIdentity, item.uris)
-                        if (confidence < 0.8) {
+                        val bestConfidence = parseUriList(item.uris)
+                            .maxOfOrNull { uri -> domainMatcher.calculateConfidence(rawIdentity, uri) }
+                            ?: domainMatcher.calculateConfidence(rawIdentity, item.uris) // fallback
+                        if (bestConfidence < 0.8) {
                             Log.w(TAG, "AUTOFILL_SUPPRESSED_REASON=low_confidence_match " +
-                                    "itemId=${item.id} confidence=$confidence " +
-                                    "identity=$normalizedIdentity")
+                                    "itemId=${item.id} bestConfidence=$bestConfidence " +
+                                    "identity=$normalizedIdentity uris=${item.uris.take(80)}")
                         }
-                        confidence >= 0.8
+                        bestConfidence >= 0.8
                     }
                 } else {
                     matches // Package identity match — exact; no confidence filtering needed
@@ -352,6 +361,39 @@ class SecureVaultAutofillService : AutofillService() {
                 callback.onFailure("autofill_exception")
             }
         }
+    }
+
+    /**
+     * Parses the URIs column from VaultItemEntity into a list of individual URL strings.
+     *
+     * The JS sync path stores uris as a JSON array string, e.g.:
+     *   '["https://id.dreamapply.com"]'
+     *   '["https://example.com","https://example.org"]'
+     *
+     * We must extract each element before passing to DomainMatcher, because
+     * DomainMatcher.normalize() cannot parse the raw JSON array string as a URL.
+     *
+     * Falls back gracefully: if parsing fails (e.g. legacy single-URL format),
+     * returns a list containing the raw string so the caller can still attempt a match.
+     */
+    private fun parseUriList(urisJson: String): List<String> {
+        val trimmed = urisJson.trim()
+        // Fast path: looks like a JSON array
+        if (trimmed.startsWith("[")) {
+            try {
+                // Manual JSON array parse — avoids a full JSON library dependency.
+                // Handles: ["url1","url2"] and ["url1"] correctly.
+                return trimmed
+                    .removePrefix("[").removeSuffix("]")
+                    .split(",")
+                    .map { it.trim().removeSurrounding("\"") }
+                    .filter { it.isNotBlank() }
+            } catch (e: Exception) {
+                Log.w(TAG, "parseUriList: failed to parse JSON array, falling back. raw=${trimmed.take(80)}")
+            }
+        }
+        // Fallback: treat the whole string as a single URI
+        return if (trimmed.isNotBlank()) listOf(trimmed) else emptyList()
     }
 
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
