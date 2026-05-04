@@ -213,9 +213,16 @@ class UnlockVaultActivity : FragmentActivity() {
         }
 
         if (matches.isEmpty()) {
-            Log.w(TAG, "No matches found for domain=$domain after unlock")
+            // Diagnostic: show item count so we can tell if DB is empty vs domain mismatch
+            val totalInDb = repository.getAllActive().size
+            val msg = if (totalInDb == 0) {
+                "Autofill DB is empty. Open Keeguard and unlock it to sync your vault."
+            } else {
+                "No match for $domain ($totalInDb items in vault)"
+            }
+            Log.w(TAG, "No matches found: domain=$domain totalInDb=$totalInDb")
             runOnUiThread {
-                Toast.makeText(this@UnlockVaultActivity, "No saved passwords found for $domain", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@UnlockVaultActivity, msg, Toast.LENGTH_LONG).show()
                 setResult(Activity.RESULT_CANCELED)
                 finishAndRemoveTask()
             }

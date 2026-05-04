@@ -42,9 +42,32 @@ class VaultBridgePlugin : Plugin() {
         for (i in 0 until itemsArray.length()) {
             val obj = itemsArray.getJSONObject(i)
 
-            // Extract URIs list and store as JSON string
-            val urisArray = obj.optJSONArray("uris")
-            val urisString = urisArray?.toString() ?: "[]"
+            // ── URI extraction ────────────────────────────────────────────────
+            // The JS layer sends `uris` in one of two formats:
+            //
+            //   FORMAT A — Pre-serialized JSON string (current store.ts behaviour):
+            //     uris = '["https://id.dreamapply.com"]'
+            //     obj.optString("uris") → '["https://id.dreamapply.com"]'
+            //     obj.optJSONArray("uris") → NULL  ← THIS WAS THE BUG
+            //
+            //   FORMAT B — Native JSON array (future-proof):
+            //     uris = ["https://example.com"]
+            //     obj.optJSONArray("uris") → JSONArray  ← works fine
+            //
+            // We must handle both. Prefer the JSONArray path; fall back to
+            // using the raw string value if it looks like a serialized array.
+            val urisString: String = run {
+                val asArray = obj.optJSONArray("uris")
+                if (asArray != null) {
+                    // FORMAT B — native array, serialise it
+                    asArray.toString()
+                } else {
+                    // FORMAT A — check if optString gives us a valid JSON array string
+                    val asString = obj.optString("uris", "[]").trim()
+                    if (asString.startsWith("[")) asString else "[$asString]"
+                }
+            }
+            Log.d("VaultBridgePlugin", "item uris parsed → $urisString")
 
             // Security note: 'password' arrives as plaintext from JS because the vault is
             // already unlocked (decrypted in memory) when syncToNativeVault() is called.
