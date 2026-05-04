@@ -303,12 +303,27 @@ class UnlockVaultActivity : FragmentActivity() {
 
         runOnUiThread {
             setResult(Activity.RESULT_OK, resultIntent)
-            finishAndRemoveTask()
+            // IMPORTANT: Use finish() here, NOT finishAndRemoveTask().
+            //
+            // The Android Autofill Framework reads EXTRA_AUTHENTICATION_RESULT from
+            // the activity result AFTER the activity finishes. If we call
+            // finishAndRemoveTask(), the OS removes the entire task immediately,
+            // and the framework never receives the fill response — causing the
+            // user to have to tap the field again manually.
+            //
+            // finish() returns control to the framework which then auto-presents
+            // the credential datasets inline in the target app (the desired behaviour).
+            //
+            // The task will be cleaned up naturally by the OS since it has
+            // taskAffinity="" and excludeFromRecents=true in the manifest.
+            finish()
         }
     }
 
     private fun finishWithCancel() {
         setResult(RESULT_CANCELED)
+        // On cancel we DO want to remove the task to avoid a ghost overlay
+        // appearing in recent apps when the user dismisses the biometric prompt.
         finishAndRemoveTask()
     }
 
