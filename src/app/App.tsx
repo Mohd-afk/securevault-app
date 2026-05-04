@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router';
 import { Toaster } from 'sonner';
+import { Analytics } from '@vercel/analytics/react';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { router } from './routes';
@@ -150,6 +151,7 @@ export default function App() {
           },
         }}
       />
+      <Analytics />
     </div>
   );
 }
