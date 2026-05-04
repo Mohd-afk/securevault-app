@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "KeeguardAutofill"
 
-class KeeguardAutofillService : AutofillService() {
+class SecureVaultAutofillService : AutofillService() {
 
     private val autofillHelper = AutofillHelper()
     private lateinit var domainMatcher: DomainMatcher
@@ -166,7 +166,7 @@ class KeeguardAutofillService : AutofillService() {
 
         // ── 4. Check autofill blocklist ──────────────────────────────────────
         val prefs = applicationContext.getSharedPreferences(
-            "KeeguardSettings", Context.MODE_PRIVATE
+            "SecureVaultSettings", Context.MODE_PRIVATE
         )
         val blocklist = prefs.getStringSet("autofillBlocklist", emptySet()) ?: emptySet()
         if (blocklist.contains(normalizedIdentity)) {
@@ -185,7 +185,7 @@ class KeeguardAutofillService : AutofillService() {
                             "identity=$normalizedIdentity")
 
                     val unlockIntent = Intent(
-                        this@KeeguardAutofillService,
+                        this@SecureVaultAutofillService,
                         UnlockVaultActivity::class.java
                     ).apply {
                         putExtra("DOMAIN", normalizedIdentity)
@@ -197,7 +197,7 @@ class KeeguardAutofillService : AutofillService() {
                     }
 
                     val pendingIntent = PendingIntent.getActivity(
-                        this@KeeguardAutofillService,
+                        this@SecureVaultAutofillService,
                         normalizedIdentity.hashCode(),
                         unlockIntent,
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE

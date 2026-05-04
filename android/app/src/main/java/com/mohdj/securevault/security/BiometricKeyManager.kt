@@ -15,8 +15,8 @@ import androidx.annotation.RequiresApi
 
 object BiometricKeyManager {
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
-    private const val KEY_ALIAS = "Keeguard_biometric_kek"
-    private const val PREFS_NAME = "Keeguard_biometric_prefs"
+    private const val KEY_ALIAS = "securevault_biometric_kek"
+    private const val PREFS_NAME = "securevault_biometric_prefs"
     private const val PREF_WRAPPED_DEK = "wrapped_dek"
     private const val PREF_IV = "wrapped_dek_iv"
 

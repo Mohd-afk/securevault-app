@@ -153,7 +153,7 @@ class BiometricBridgePlugin : Plugin() {
             blocklistSet.add(blocklistArray.getString(i))
         }
         
-        val prefs = context.getSharedPreferences("KeeguardSettings", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences("SecureVaultSettings", Context.MODE_PRIVATE)
         prefs.edit().putStringSet("autofillBlocklist", blocklistSet).apply()
         
         call.resolve(JSObject().put("success", true))
