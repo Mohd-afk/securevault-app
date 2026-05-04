@@ -58,44 +58,80 @@ class AutofillHelper {
         }
 
         // Step 2: Try to identify the field purpose
-        if (node.autofillHints?.contains(android.view.View.AUTOFILL_HINT_USERNAME) == true ||
-            node.autofillHints?.contains(android.view.View.AUTOFILL_HINT_EMAIL_ADDRESS) == true) {
-            result.usernameNodes.add(node)
-        } else if (node.autofillHints?.contains(android.view.View.AUTOFILL_HINT_PASSWORD) == true) {
+        val hints = node.autofillHints ?: emptyArray()
+        val hintSet = hints.toSet()
+
+        // Standard autofill hints — most reliable signal
+        if (hintSet.contains(android.view.View.AUTOFILL_HINT_PASSWORD) ||
+            hintSet.contains("current-password") ||
+            hintSet.contains("new-password")) {
+            Log.d("AutofillHelper", "Password field via hint: ${node.idEntry}")
             result.passwordNodes.add(node)
+        } else if (hintSet.contains(android.view.View.AUTOFILL_HINT_USERNAME) ||
+            hintSet.contains(android.view.View.AUTOFILL_HINT_EMAIL_ADDRESS) ||
+            hintSet.contains("username") || hintSet.contains("email")) {
+            Log.d("AutofillHelper", "Username field via hint: ${node.idEntry}")
+            result.usernameNodes.add(node)
         } else {
             // Heuristic fallback if hints are missing
             val viewId = node.idEntry?.lowercase() ?: ""
             val inputType = node.inputType
-            
-            // InputType: 128 (TYPE_CLASS_TEXT | TYPE_TEXT_VARIATION_PASSWORD)
-            // InputType: 224 (TYPE_CLASS_TEXT | TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)
-            // InputType: 18 (TYPE_CLASS_NUMBER | TYPE_NUMBER_VARIATION_PASSWORD)
-            val isPasswordInputType = (inputType and android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0 ||
-                                      (inputType and android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD) != 0 ||
-                                      (inputType and android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD) != 0
 
-            // Layer 4: Check hint text and content description (Fix C)
-            val hintText = node.hint?.lowercase() ?: ""
-            val contentDesc = node.contentDescription?.toString()?.lowercase() ?: ""
-            val combined = "\$viewId \$hintText \$contentDesc"
+            // ── Password InputType detection ────────────────────────────────
+            // inputType is a bitmask. The variation occupies bits 8-11 (0x00000FF0 range).
+            // We mask off the class bits and compare only the variation.
+            // TYPE_CLASS_TEXT           = 0x00000001
+            // TYPE_TEXT_VARIATION_PASSWORD         = 0x00000080
+            // TYPE_TEXT_VARIATION_VISIBLE_PASSWORD  = 0x00000090
+            // TYPE_TEXT_VARIATION_WEB_PASSWORD      = 0x000000E0
+            // TYPE_NUMBER_VARIATION_PASSWORD        = 0x00000010 (class = 2)
+            val textVariation = inputType and 0x00000FF0  // strip class bits
+            val isPasswordInputType =
+                textVariation == android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                textVariation == android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                textVariation == android.text.InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
+                // Some implementations use the raw flag value
+                (inputType and android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0 ||
+                (inputType and 0x000000E0) != 0 // web password variation
 
-            val passwordKeywords = listOf("password", "passcode", "pin", "secret", "passwd", "contraseña", "senha", "пароль", "密码")
-            val usernameKeywords = listOf("username", "email", "login", "account", "phone", "userid", "member", "user name", "correo", "usuario")
-
-            // Layer 5: Web-specific attribute checks (type, name, id)
+            // HTML attributes (for WebView / Chrome-rendered forms)
             val htmlType = node.htmlInfo?.attributes?.find { it.first == "type" }?.second?.lowercase() ?: ""
             val htmlName = node.htmlInfo?.attributes?.find { it.first == "name" }?.second?.lowercase() ?: ""
-            val htmlId = node.htmlInfo?.attributes?.find { it.first == "id" }?.second?.lowercase() ?: ""
-            val combinedWeb = "$htmlType $htmlName $htmlId".lowercase()
+            val htmlId   = node.htmlInfo?.attributes?.find { it.first == "id"   }?.second?.lowercase() ?: ""
 
-            if (isPasswordInputType || passwordKeywords.any { combined.contains(it) } || htmlType == "password") {
+            val hintText     = node.hint?.lowercase() ?: ""
+            val contentDesc  = node.contentDescription?.toString()?.lowercase() ?: ""
+            val combined     = "$viewId $hintText $contentDesc $htmlName $htmlId"
+
+            val passwordKeywords = listOf(
+                "password", "passcode", "pin", "secret", "passwd",
+                "contraseña", "senha", "пароль", "密码", "pass"
+            )
+            val usernameKeywords = listOf(
+                "username", "email", "login", "account", "phone",
+                "userid", "user_id", "member", "user name", "correo", "usuario",
+                "e-mail", "mail"
+            )
+
+            val isHtmlPassword = htmlType == "password"
+            val matchesPasswordKeyword = passwordKeywords.any { combined.contains(it) }
+            val matchesUsernameKeyword = usernameKeywords.any { combined.contains(it) }
+
+            Log.d("AutofillHelper", "Heuristic check: viewId=$viewId htmlType=$htmlType " +
+                    "inputType=0x${inputType.toString(16)} textVariation=0x${textVariation.toString(16)} " +
+                    "isPasswordInputType=$isPasswordInputType isHtmlPassword=$isHtmlPassword")
+
+            if (isPasswordInputType || isHtmlPassword || matchesPasswordKeyword) {
+                Log.d("AutofillHelper", "→ CLASSIFIED as PASSWORD field")
                 result.passwordNodes.add(node)
-            } else if (usernameKeywords.any { combined.contains(it) } || 
-                       htmlType == "email" || htmlType == "text" && usernameKeywords.any { combinedWeb.contains(it) }) {
+            } else if (matchesUsernameKeyword || htmlType == "email" ||
+                       (htmlType == "text" && usernameKeywords.any { "$htmlName $htmlId".contains(it) })) {
                 if (isEditableNode(node)) {
+                    Log.d("AutofillHelper", "→ CLASSIFIED as USERNAME field")
                     result.usernameNodes.add(node)
                 }
+            } else {
+                Log.d("AutofillHelper", "→ UNCLASSIFIED field (skipped)")
             }
         }
 
