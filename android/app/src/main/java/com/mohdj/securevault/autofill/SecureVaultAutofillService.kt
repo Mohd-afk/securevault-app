@@ -10,7 +10,7 @@ package com.mohdj.securevault.autofill
 // RC3: Relaxed "naked password" session-cache guard for native app contexts (identityType
 //      == "package"). The multi-step phishing guard remains for web/browser flows only.
 // OBS: Added structured AUTOFILL_* log tags for adb logcat observability.
-//      Log prefix: "SecureVaultAutofill"
+//      Log prefix: "KeeguardAutofill"
 // ─────────────────────────────────────────────────────────────────────────────
 
 import android.app.PendingIntent
@@ -36,9 +36,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-private const val TAG = "SecureVaultAutofill"
+private const val TAG = "KeeguardAutofill"
 
-class SecureVaultAutofillService : AutofillService() {
+class KeeguardAutofillService : AutofillService() {
 
     private val autofillHelper = AutofillHelper()
     private lateinit var domainMatcher: DomainMatcher
@@ -166,7 +166,7 @@ class SecureVaultAutofillService : AutofillService() {
 
         // ── 4. Check autofill blocklist ──────────────────────────────────────
         val prefs = applicationContext.getSharedPreferences(
-            "SecureVaultSettings", Context.MODE_PRIVATE
+            "KeeguardSettings", Context.MODE_PRIVATE
         )
         val blocklist = prefs.getStringSet("autofillBlocklist", emptySet()) ?: emptySet()
         if (blocklist.contains(normalizedIdentity)) {
@@ -185,7 +185,7 @@ class SecureVaultAutofillService : AutofillService() {
                             "identity=$normalizedIdentity")
 
                     val unlockIntent = Intent(
-                        this@SecureVaultAutofillService,
+                        this@KeeguardAutofillService,
                         UnlockVaultActivity::class.java
                     ).apply {
                         putExtra("DOMAIN", normalizedIdentity)
@@ -197,7 +197,7 @@ class SecureVaultAutofillService : AutofillService() {
                     }
 
                     val pendingIntent = PendingIntent.getActivity(
-                        this@SecureVaultAutofillService,
+                        this@KeeguardAutofillService,
                         normalizedIdentity.hashCode(),
                         unlockIntent,
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -207,7 +207,7 @@ class SecureVaultAutofillService : AutofillService() {
                         packageName, android.R.layout.simple_list_item_1
                     )
                     presentation.setTextViewText(
-                        android.R.id.text1, "\uD83D\uDD10 Unlock SecureVault"
+                        android.R.id.text1, "\uD83D\uDD10 Unlock Keeguard"
                     )
 
                     val autofillIds = (
@@ -274,7 +274,7 @@ class SecureVaultAutofillService : AutofillService() {
                     )
                     presentation.setTextViewText(
                         android.R.id.text1,
-                        item.username.ifEmpty { item.title }.ifEmpty { "SecureVault" }
+                        item.username.ifEmpty { item.title }.ifEmpty { "Keeguard" }
                     )
 
                     var datasetUsable = false
@@ -317,7 +317,7 @@ class SecureVaultAutofillService : AutofillService() {
                         // The user should unlock and re-lock the vault app to trigger a fresh
                         // sync. We log this as a warning but do NOT throw.
                         Log.w(TAG, "AUTOFILL: empty password for itemId=${item.id} " +
-                                "— user should re-sync vault (open SecureVault while unlocked)")
+                                "— user should re-sync vault (open Keeguard while unlocked)")
                     }
 
                     if (datasetUsable) {

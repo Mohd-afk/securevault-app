@@ -1,4 +1,4 @@
-// ─── SecureVault Crypto Module ───────────────────────────────────────
+// Keeguard Crypto Module ───────────────────────────────────────
 // Uses:
 //   • Argon2id (via hash-wasm WASM) for key derivation
 //   • AES-GCM (256-bit) for vault encryption/decryption

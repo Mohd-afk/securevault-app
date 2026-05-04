@@ -71,7 +71,7 @@ class BiometricBridgePlugin : Plugin() {
         CoroutineScope(Dispatchers.Main).launch {
             showBiometricPrompt(
                 cipher,
-                title = "Link Biometrics to SecureVault",
+                title = "Link Biometrics to Keeguard",
                 subtitle = "Authenticate to allow unlocking your vault safely",
                 onSuccess = { cryptoObject ->
                     try {
@@ -109,7 +109,7 @@ class BiometricBridgePlugin : Plugin() {
         CoroutineScope(Dispatchers.Main).launch {
             showBiometricPrompt(
                 cipher,
-                title = "Unlock SecureVault",
+                title = "Unlock Keeguard",
                 subtitle = "Verify your identity to open the vault",
                 onSuccess = { cryptoObject ->
                     try {
@@ -153,7 +153,7 @@ class BiometricBridgePlugin : Plugin() {
             blocklistSet.add(blocklistArray.getString(i))
         }
         
-        val prefs = context.getSharedPreferences("SecureVaultSettings", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences("KeeguardSettings", Context.MODE_PRIVATE)
         prefs.edit().putStringSet("autofillBlocklist", blocklistSet).apply()
         
         call.resolve(JSObject().put("success", true))

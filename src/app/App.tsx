@@ -111,7 +111,7 @@ export default function App() {
           animation: 'spin 1s linear infinite',
         }} />
         <p style={{ color: '#6b7280', fontSize: '14px', margin: 0 }}>
-          Loading SecureVault...
+          Loading Keeguard...
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>

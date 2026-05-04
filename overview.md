@@ -1,7 +1,7 @@
 # App Specification: Minimal Open‑Source Password Manager
 
-## Working Name
-SecureVault (placeholder – final name can change)
+## Working Name / App Name
+Keeguard (**final name** — previously called SecureVault; same app, new branding)
 
 ## Platforms and Scope
 - **Core Standard:** Mobile-First design philosophy.

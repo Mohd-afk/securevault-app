@@ -1,4 +1,6 @@
-# SecureVault — Android Autofill Architecture
+# Keeguard — Android Autofill Architecture
+
+> **Branding alias:** This app was previously called **SecureVault** and is now called **Keeguard**. `Keeguard` = `SecureVault` — same app, new name. The class `SecureVaultAutofillService` and package `com.mohdj.securevault` retain the old name intentionally (changing them would break existing installs).
 
 > **Version**: 3.2.2  
 > **Last Updated**: 2026-04-19  
@@ -8,7 +10,8 @@
 
 ## Overview
 
-SecureVault implements the Android [AutofillService](https://developer.android.com/reference/android/service/autofill/AutofillService) API to suggest saved credentials in third-party apps and browsers. This document describes the data flow, security boundaries, and design decisions for the native autofill subsystem.
+Keeguard implements the Android [AutofillService](https://developer.android.com/reference/android/service/autofill/AutofillService) API to suggest saved credentials in third-party apps and browsers. This document describes the data flow, security boundaries, and design decisions for the native autofill subsystem.
+
 
 ---
 

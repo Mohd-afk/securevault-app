@@ -10,7 +10,7 @@ import java.util.Date
 import java.util.Locale
 
 object TelemetryLogger {
-    private const val TAG = "SecureVaultTelemetry"
+    private const val TAG = "KeeguardTelemetry"
     private const val FILE_NAME = "autofill_telemetry.jsonl"
 
     enum class EventType {

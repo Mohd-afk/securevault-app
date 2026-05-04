@@ -1,11 +1,16 @@
 
-  # App with Guidelines and UI
+# Keeguard — Zero-Knowledge Password Manager
 
-  This is a code bundle for App with Guidelines and UI. The original project is available at https://www.figma.com/design/0bEQcYroVsPLP5beDKWPuk/App-with-Guidelines-and-UI.
+> **Formerly known as SecureVault.** `Keeguard` = `SecureVault` — same app, new name.
 
-  ## Running the code
+A secure, open-source, zero-knowledge password manager built with React + Vite + Capacitor (Android) + Firebase.
 
-  Run `npm i` to install the dependencies.
+## Running locally
 
-  Run `npm run dev` to start the development server.
-  
+Run `npm i` to install the dependencies.  
+Run `npm run dev` to start the development server.
+
+## Deploying
+
+Run `npm run release` for an OTA web update.  
+See `AGENT_RULES.md` for the full deployment protocol.

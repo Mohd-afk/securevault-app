@@ -1,11 +1,14 @@
-# SecureVault — Feature & Architecture Documentation
+# Keeguard — Feature & Architecture Documentation
+
+> **Branding alias:** This app was previously called **SecureVault** and is now called **Keeguard**. `Keeguard` = `SecureVault` — they are the **same app**, just old vs. new name. Internal identifiers (package `com.mohdj.securevault`, storage keys `securevault_*`) keep the old name intentionally to protect existing user data.
 
 > **Last Updated:** 2026-03-25  
 > **Current Version:** 1.0.4  
 > **Repository:** Mohd-afk/securevault-app  
 > **Stack:** React 18 · Vite · Capacitor (Android) · Firebase (Auth, Firestore) · Kotlin (Native)
 
-This document is the **single source of truth** for every feature, technical decision, and architectural evolution in the SecureVault project. It should be updated whenever new features are introduced or existing ones are modified.
+This document is the **single source of truth** for every feature, technical decision, and architectural evolution in the Keeguard project. It should be updated whenever new features are introduced or existing ones are modified.
+
 
 ---
 

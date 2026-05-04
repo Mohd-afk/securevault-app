@@ -1,4 +1,4 @@
-// ─── SecureVault Auth Module ─────────────────────────────────────────
+// Keeguard Auth Module ─────────────────────────────────────────
 // Wraps Firebase Auth for email logic (passwordless + derived keys).
 // Contains native Capacitor Google Sign-In support.
 //

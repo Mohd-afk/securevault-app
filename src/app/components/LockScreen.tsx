@@ -198,7 +198,7 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
           <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mb-4 shadow-lg shadow-cyan-500/20">
             <Shield className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-white mb-1">SecureVault</h1>
+          <h1 className="text-white mb-1">Keeguard</h1>
 
           {/* User email */}
           {userEmail && (

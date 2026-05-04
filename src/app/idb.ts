@@ -1,4 +1,4 @@
-// ─── SecureVault IndexedDB Helper ────────────────────────────────────
+// ─── Keeguard IndexedDB Helper ───────────────────────────────────────
 // Thin, promise-based wrapper around IndexedDB for storing encrypted
 // vault data and settings. Replaces localStorage for better performance
 // and isolation from casual JS access.

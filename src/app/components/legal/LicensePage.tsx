@@ -24,13 +24,13 @@ export function LicensePage() {
                 {/* Intro */}
                 <div className="bg-[#16213e] rounded-2xl p-5 border border-white/5">
                     <p className="text-gray-400 text-sm leading-relaxed">
-                        SecureVault's code and content are protected by copyright.
+                        Keeguard's code and content are protected by copyright.
                         The developer retains all rights not expressly granted to you under this License Agreement.
                     </p>
                 </div>
 
                 <Section title="Personal License Grant">
-                    <p>You are granted a personal, non-exclusive, non-transferable, revocable license to use SecureVault for your private, personal use only. This license does <strong className="text-white">not</strong> allow you to:</p>
+                    <p>You are granted a personal, non-exclusive, non-transferable, revocable license to use Keeguard for your private, personal use only. This license does <strong className="text-white">not</strong> allow you to:</p>
                     <ul>
                         <li>Copy, modify, or distribute the application</li>
                         <li>Reverse-engineer or decompile the source code</li>
@@ -40,14 +40,14 @@ export function LicensePage() {
                 </Section>
 
                 <Section title="Open-Source Components">
-                    <p>SecureVault is built upon several open-source libraries, each governed by their respective licenses (MIT, Apache 2.0, etc.). These components include but are not limited to:</p>
+                    <p>Keeguard is built upon several open-source libraries, each governed by their respective licenses (MIT, Apache 2.0, etc.). These components include but are not limited to:</p>
                     <ul>
                         <li>React (MIT License)</li>
                         <li>Firebase SDK (Apache 2.0)</li>
                         <li>Tailwind CSS (MIT License)</li>
                         <li>Lucide Icons (ISC License)</li>
                     </ul>
-                    <p className="mt-2">The use of these components does not grant you any rights to the SecureVault application itself beyond what is described in this agreement.</p>
+                    <p className="mt-2">The use of these components does not grant you any rights to the Keeguard application itself beyond what is described in this agreement.</p>
                 </Section>
 
                 <Section title="MIT License (Reference)">
@@ -58,11 +58,11 @@ export function LicensePage() {
                         <br /><br />
                         THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.
                     </p>
-                    <p className="text-xs text-gray-500 mt-2">Note: The above MIT License text applies to open-source components used within SecureVault, not to the application as a whole.</p>
+                    <p className="text-xs text-gray-500 mt-2">Note: The above MIT License text applies to open-source components used within Keeguard, not to the application as a whole.</p>
                 </Section>
 
                 <Section title="No Warranty">
-                    <p>SecureVault is provided <strong className="text-white">"as is"</strong>, without warranty of any kind — express or implied. In no event shall the developer or contributors be liable for any claim, damages, or other liability arising from, out of, or in connection with the software or the use of it.</p>
+                    <p>Keeguard is provided <strong className="text-white">"as is"</strong>, without warranty of any kind — express or implied. In no event shall the developer or contributors be liable for any claim, damages, or other liability arising from, out of, or in connection with the software or the use of it.</p>
                 </Section>
 
                 <Section title="Termination">
@@ -71,14 +71,14 @@ export function LicensePage() {
 
                 <Section title="Contact">
                     <p>For licensing inquiries, contact us at{' '}
-                        <a href="mailto:support@securevault.app" className="text-cyan-400 hover:underline">support@securevault.app</a>.
+                        <a href="mailto:support@Keeguard.app" className="text-cyan-400 hover:underline">support@Keeguard.app</a>.
                     </p>
                 </Section>
 
                 {/* Copyright footer */}
                 <div className="text-center pt-4">
-                    <p className="text-gray-600 text-xs">© {new Date().getFullYear()} SecureVault. All rights reserved.</p>
-                    <p className="text-gray-600 text-xs mt-1">SecureVault is an independent software project operated by its developer.</p>
+                    <p className="text-gray-600 text-xs">© {new Date().getFullYear()} Keeguard. All rights reserved.</p>
+                    <p className="text-gray-600 text-xs mt-1">Keeguard is an independent software project operated by its developer.</p>
                 </div>
             </div>
         </div>

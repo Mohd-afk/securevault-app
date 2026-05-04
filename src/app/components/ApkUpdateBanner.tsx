@@ -91,7 +91,7 @@ export default function ApkUpdateBanner({ downloadUrl }: ApkUpdateBannerProps) {
         lineHeight: 1.65,
         margin: '0 0 0.5rem 0',
       }}>
-        A new version of SecureVault is available that includes important native updates.
+        A new version of Keeguard is available that includes important native updates.
       </p>
       <p style={{
         fontSize: '0.875rem',

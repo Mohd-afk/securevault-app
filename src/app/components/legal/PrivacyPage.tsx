@@ -25,7 +25,7 @@ export function PrivacyPage() {
                 <div className="bg-gradient-to-r from-cyan-500/10 to-blue-600/10 border border-cyan-500/20 rounded-2xl p-5">
                     <p className="text-cyan-300 text-sm font-medium mb-1">Zero-Knowledge Architecture</p>
                     <p className="text-gray-400 text-sm leading-relaxed">
-                        SecureVault is a zero-knowledge password manager. All sensitive data you store is end-to-end encrypted on your device. We <strong className="text-white">cannot</strong> read your vault — ever.
+                        Keeguard is a zero-knowledge password manager. All sensitive data you store is end-to-end encrypted on your device. We <strong className="text-white">cannot</strong> read your vault — ever.
                     </p>
                 </div>
 
@@ -39,7 +39,7 @@ export function PrivacyPage() {
                 </Section>
 
                 <Section title="Vault Data (Encrypted)">
-                    <p>Everything you store in SecureVault (passwords, secure notes, etc.) is encrypted with <strong className="text-white">AES-256-GCM</strong> on your device using your Master Password. The encrypted data may be synced through Firebase but is always encrypted under your control. <strong className="text-white">We cannot decrypt or see your vault data.</strong></p>
+                    <p>Everything you store in Keeguard (passwords, secure notes, etc.) is encrypted with <strong className="text-white">AES-256-GCM</strong> on your device using your Master Password. The encrypted data may be synced through Firebase but is always encrypted under your control. <strong className="text-white">We cannot decrypt or see your vault data.</strong></p>
                 </Section>
 
                 <Section title="How We Use Your Data">
@@ -68,11 +68,11 @@ export function PrivacyPage() {
                 </Section>
 
                 <Section title="Third-Party Services">
-                    <p>SecureVault uses <strong className="text-white">Firebase</strong> (operated by Google) for authentication and encrypted data sync. Your non-sensitive data (email, encrypted vault) is stored in Google's infrastructure under their Privacy Policy. We do not use any other third-party services that collect personal information.</p>
+                    <p>Keeguard uses <strong className="text-white">Firebase</strong> (operated by Google) for authentication and encrypted data sync. Your non-sensitive data (email, encrypted vault) is stored in Google's infrastructure under their Privacy Policy. We do not use any other third-party services that collect personal information.</p>
                 </Section>
 
                 <Section title="Cookies">
-                    <p>The SecureVault app does not use tracking or marketing cookies. Only essential session cookies are used for keeping you logged in.</p>
+                    <p>The Keeguard app does not use tracking or marketing cookies. Only essential session cookies are used for keeping you logged in.</p>
                 </Section>
 
                 <Section title="Policy Updates">
@@ -81,7 +81,7 @@ export function PrivacyPage() {
 
                 <Section title="Contact">
                     <p>For privacy questions or to exercise your rights, contact us at{' '}
-                        <a href="mailto:support@securevault.app" className="text-cyan-400 hover:underline">support@securevault.app</a>.
+                        <a href="mailto:support@Keeguard.app" className="text-cyan-400 hover:underline">support@Keeguard.app</a>.
                     </p>
                 </Section>
             </div>

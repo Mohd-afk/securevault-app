@@ -53,7 +53,7 @@ class UnlockVaultActivity : FragmentActivity() {
         if (!BiometricKeyManager.isBiometricEnabled(this)) {
             Toast.makeText(
                 this,
-                "Biometric unlock is not enabled. Open SecureVault to set it up.",
+                "Biometric unlock is not enabled. Open Keeguard to set it up.",
                 Toast.LENGTH_LONG
             ).show()
             finishWithCancel()
@@ -145,7 +145,7 @@ class UnlockVaultActivity : FragmentActivity() {
         )
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock SecureVault")
+            .setTitle("Unlock Keeguard")
             .setSubtitle("Autofill requires authentication")
             .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .setNegativeButtonText("Cancel")
@@ -166,7 +166,7 @@ class UnlockVaultActivity : FragmentActivity() {
             // This happens when the user adds/removes fingerprints after enabling biometric unlock
             Toast.makeText(
                 this,
-                "Re-enable biometric unlock in SecureVault (fingerprints changed)",
+                "Re-enable biometric unlock in Keeguard (fingerprints changed)",
                 Toast.LENGTH_LONG
             ).show()
             finishWithCancel()
@@ -217,7 +217,7 @@ class UnlockVaultActivity : FragmentActivity() {
             val presentation = RemoteViews(packageName, android.R.layout.simple_list_item_1)
             presentation.setTextViewText(
                 android.R.id.text1,
-                item.username.ifEmpty { item.title }.ifEmpty { "SecureVault" }
+                item.username.ifEmpty { item.title }.ifEmpty { "Keeguard" }
             )
 
             var datasetUsable = false
@@ -242,7 +242,7 @@ class UnlockVaultActivity : FragmentActivity() {
                 }
             } else if (passwordToFill.isEmpty()) {
                 Log.w(TAG, "Empty password for itemId=${item.id} after unlock " +
-                        "— user should re-sync (open SecureVault while vault is unlocked)")
+                        "— user should re-sync (open Keeguard while vault is unlocked)")
             }
 
             if (datasetUsable) {

@@ -270,7 +270,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(24);
-        doc.text("SecureVault Emergency Kit", 20, 30);
+        doc.text("Keeguard Emergency Kit", 20, 30);
 
         doc.setFontSize(12);
         doc.setTextColor(156, 163, 175); // gray-400
@@ -297,7 +297,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         const date = new Date().toLocaleString();
         doc.text(`Generated on: ${date}`, 20, 130);
 
-        doc.save("SecureVault_Emergency_Kit.pdf");
+        doc.save("Keeguard_Emergency_Kit.pdf");
     };
 
     // ── Master Password Setup (Flow 1 & 3) ────────────────────────
@@ -497,7 +497,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                             </div>
                             <div className="p-4 space-y-4">
                                 <p className="text-gray-300 text-sm leading-relaxed text-left">
-                                    SecureVault uses <strong>Zero-Knowledge Encryption</strong>. This means we do not store your Master Password and <strong>cannot reset it if you forget it.</strong>
+                                    Keeguard uses <strong>Zero-Knowledge Encryption</strong>. This means we do not store your Master Password and <strong>cannot reset it if you forget it.</strong>
                                 </p>
 
                                 <div className="bg-[#1a1a2e] p-3 rounded-lg border border-cyan-500/20">
@@ -656,7 +656,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mb-4 shadow-lg shadow-cyan-500/20">
                         <Shield className="w-10 h-10 text-white" />
                     </div>
-                    <h1 className="text-white mb-1">SecureVault</h1>
+                    <h1 className="text-white mb-1">Keeguard</h1>
                     <p className="text-gray-400 text-sm">
                         Zero-Knowledge Encryption
                     </p>
@@ -814,7 +814,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                         className="text-gray-400 text-sm hover:text-cyan-400 transition-colors"
                     >
                         {isLogin
-                            ? "New to SecureVault? Create Account"
+                            ? "New to Keeguard? Create Account"
                             : 'Already have an account? Sign In'}
                     </button>
                     {!isLogin && (

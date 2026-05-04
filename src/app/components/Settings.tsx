@@ -55,7 +55,7 @@ function FeedbackModal({ onClose, user }: { onClose: () => void, user: User }) {
                         </div>
                         <div>
                             <h3 className="text-white font-medium text-base sm:text-lg">Send Feedback</h3>
-                            <p className="text-gray-400 text-xs hidden sm:block mt-0.5">Let us know how we can improve SecureVault</p>
+                            <p className="text-gray-400 text-xs hidden sm:block mt-0.5">Let us know how we can improve Keeguard</p>
                         </div>
                     </div>
                     <button
@@ -433,18 +433,18 @@ export function Settings() {
         if (Capacitor.isNativePlatform()) {
             try {
                 await Share.share({
-                    title: 'SecureVault',
-                    text: 'Check out SecureVault, a secure, zero-knowledge password manager!',
+                    title: 'Keeguard',
+                    text: 'Check out Keeguard, a secure, zero-knowledge password manager!',
                     url: window.location.origin,
-                    dialogTitle: 'Share SecureVault',
+                    dialogTitle: 'Share Keeguard',
                 });
             } catch (error) {
                 console.error('Error sharing', error);
             }
         } else if (navigator.share) {
             navigator.share({
-                title: 'SecureVault',
-                text: 'Check out SecureVault, a secure, zero-knowledge password manager!',
+                title: 'Keeguard',
+                text: 'Check out Keeguard, a secure, zero-knowledge password manager!',
                 url: window.location.origin
             }).catch(() => { });
         } else {
@@ -1107,13 +1107,13 @@ export function Settings() {
                                     </span>
                                 </p>
                                 <p className="text-gray-500 text-[11px] mt-1.5 leading-relaxed max-w-[240px]">
-                                    Use SecureVault to automatically fill passwords in your other apps and websites.
+                                    Use Keeguard to automatically fill passwords in your other apps and websites.
                                 </p>
                             </div>
                             <button
                                 onClick={() => {
                                     toast.info('Action Required', { 
-                                        description: 'Please go to Android Settings > Passwords & Accounts > Autofill service, and select SecureVault.',
+                                        description: 'Please go to Android Settings > Passwords & Accounts > Autofill service, and select Keeguard.',
                                         duration: 6000 
                                     });
                                 }}
@@ -1253,7 +1253,7 @@ export function Settings() {
                                     const url = URL.createObjectURL(blob);
                                     const a = document.createElement('a');
                                     a.href = url;
-                                    a.download = `securevault-export-${new Date().toISOString().slice(0, 10)}.csv`;
+                                    a.download = `keeguard-export-${new Date().toISOString().slice(0, 10)}.csv`;
                                     a.click();
                                     URL.revokeObjectURL(url);
                                     toast.success('Passwords exported as CSV');
@@ -1400,7 +1400,7 @@ export function Settings() {
                                     <Share2 className="w-5 h-5 text-gray-400" />
                                 </div>
                                 <div className="text-left">
-                                    <span className="text-white text-sm block font-medium group-hover:text-white transition-colors">Share SecureVault</span>
+                                    <span className="text-white text-sm block font-medium group-hover:text-white transition-colors">Share Keeguard</span>
                                     <span className="text-gray-400 text-xs">Invite your friends</span>
                                 </div>
                             </div>
@@ -1509,7 +1509,7 @@ export function Settings() {
                     </div>
                     )}
                     <p className="text-gray-600 text-[10px] text-center mt-3 mb-6">
-                        © {new Date().getFullYear()} SecureVault · An independent software project
+                        © {new Date().getFullYear()} Keeguard · An independent software project
                     </p>
                 </div>
             </div>

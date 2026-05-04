@@ -1,6 +1,9 @@
-# SecureVault Design System & Visual Language Reference
+# Keeguard Design System & Visual Language Reference
 
-> This document describes every visual and structural decision in the SecureVault app so that any AI or developer can build new screens, add features, or modify existing ones while keeping the look, feel, and logic 100 % consistent.
+> **Branding alias:** This app was previously called **SecureVault** and is now called **Keeguard**. They are the same app. All references to "SecureVault" in this document mean "Keeguard". Internal identifiers (package name `com.mohdj.securevault`, storage keys `securevault_*`) keep the old name to protect existing user data.
+
+> This document describes every visual and structural decision in the Keeguard app so that any AI or developer can build new screens, add features, or modify existing ones while keeping the look, feel, and logic 100 % consistent.
+
 
 ---
 

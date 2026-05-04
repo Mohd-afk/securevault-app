@@ -1,4 +1,4 @@
-// ─── SecureVault Secure Memory Module ────────────────────────────────
+// Keeguard Secure Memory Module ────────────────────────────────
 // Provides Uint8Array-based password handling with explicit zeroing
 // to minimize plaintext password exposure in RAM.
 // ─────────────────────────────────────────────────────────────────────

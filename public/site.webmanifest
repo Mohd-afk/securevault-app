@@ -1,0 +1,23 @@
+{
+  "name": "Keeguard — Zero-Knowledge Password Manager",
+  "short_name": "Keeguard",
+  "description": "A zero-knowledge, end-to-end encrypted password manager.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "/logo192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

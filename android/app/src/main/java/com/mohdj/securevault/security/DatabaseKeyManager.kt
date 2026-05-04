@@ -12,8 +12,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 object DatabaseKeyManager {
-    private const val KEY_ALIAS = "securevault_db_wrapper_key"
-    private const val PREFS_NAME = "securevault_crypto_prefs"
+    private const val KEY_ALIAS = "Keeguard_db_wrapper_key"
+    private const val PREFS_NAME = "Keeguard_crypto_prefs"
     private const val PREF_ENCRYPTED_DB_KEY = "encrypted_db_key"
     private const val PREF_IV = "db_key_iv"
 
