@@ -30,7 +30,7 @@ export function SortModal({ open, onClose, value, onChange }: SortModalProps) {
 
       {/* Sheet */}
       <div
-        className="relative w-full max-w-md bg-[#1e2533] rounded-t-3xl px-4 pt-5 pb-[max(env(safe-area-inset-bottom),_20px)] shadow-2xl animate-slide-up"
+        className="relative w-full max-w-md bg-[#16213e] rounded-t-3xl px-4 pt-5 pb-[max(env(safe-area-inset-bottom),_20px)] shadow-2xl animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-white text-xl font-semibold mb-5 px-2">Sorting</h3>
@@ -49,7 +49,7 @@ export function SortModal({ open, onClose, value, onChange }: SortModalProps) {
               <div
                 className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                   value === opt.value
-                    ? 'border-[#f5a623] bg-[#f5a623]'
+                    ? 'border-cyan-500 bg-cyan-500'
                     : 'border-gray-500'
                 }`}
               >
@@ -65,7 +65,7 @@ export function SortModal({ open, onClose, value, onChange }: SortModalProps) {
         <div className="flex justify-end">
           <button
             onClick={onClose}
-            className="text-[#f5a623] font-medium text-base px-4 py-2"
+            className="text-cyan-400 font-medium text-base px-4 py-2"
           >
             Cancel
           </button>

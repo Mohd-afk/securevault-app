@@ -120,7 +120,7 @@ export function ItemDetail() {
           <h2 className="text-white truncate flex-1">{item.title}</h2>
           <button
             onClick={handleToggleFavorite}
-            className={`p-2 rounded-lg transition-colors ${isFav ? 'text-[#f5a623]' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`p-2 rounded-lg transition-colors ${isFav ? 'text-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}
             aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
           >
             <Star className="w-5 h-5" fill={isFav ? 'currentColor' : 'none'} />

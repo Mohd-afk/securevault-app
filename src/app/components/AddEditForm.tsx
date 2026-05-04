@@ -104,7 +104,7 @@ export function AddEditForm() {
           </div>
           <button
             onClick={() => setIsFavorite(!isFavorite)}
-            className={`p-2 rounded-lg transition-colors ${isFavorite ? 'text-[#f5a623]' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`p-2 rounded-lg transition-colors ${isFavorite ? 'text-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}
             aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
             <Star className="w-5 h-5" fill={isFavorite ? 'currentColor' : 'none'} />

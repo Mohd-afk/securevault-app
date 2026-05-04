@@ -77,7 +77,7 @@ function BottomNav({ active, onChange }: BottomNavProps) {
   ];
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-30 bg-[#111827]/95 backdrop-blur-md border-t border-white/5 flex justify-around items-center pb-[max(env(safe-area-inset-bottom),_4px)]"
+      className="fixed bottom-0 left-0 right-0 z-30 bg-[#1a1a2e]/95 backdrop-blur-md border-t border-white/5 flex justify-around items-center pb-[max(env(safe-area-inset-bottom),_4px)]"
       style={{ maxWidth: '448px', margin: '0 auto' }}
     >
       {tabs.map((t) => (
@@ -86,14 +86,14 @@ function BottomNav({ active, onChange }: BottomNavProps) {
           onClick={() => onChange(t.id)}
           className={`flex flex-col items-center gap-1 px-5 pt-3 pb-2 transition-colors ${
             active === t.id
-              ? 'text-[#f5a623]'
+              ? 'text-cyan-400'
               : 'text-gray-500 hover:text-gray-300'
           }`}
         >
           {t.icon}
           <span className="text-[10px] font-medium">{t.label}</span>
           {active === t.id && (
-            <div className="absolute bottom-0 h-0.5 w-10 bg-[#f5a623] rounded-t-full" />
+            <div className="absolute bottom-0 h-0.5 w-10 bg-cyan-400 rounded-t-full" />
           )}
         </button>
       ))}
@@ -141,7 +141,7 @@ function ItemCard({ item, onNavigate, onFavorite, favLoading }: ItemCardProps) {
         disabled={favLoading === item.id}
         className={`p-2 rounded-lg transition-all shrink-0 ${
           item.isFavorite
-            ? 'text-[#f5a623]'
+            ? 'text-cyan-400'
             : 'text-gray-600 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
         }`}
         aria-label={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -245,7 +245,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const totalActive = activeVaultItems.length;
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex flex-col">
+    <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       <Sidebar
         open={sidebarOpen}
@@ -268,7 +268,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       />
 
       {/* ── Header ──────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 bg-[#0f1117]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
+      <div className="sticky top-0 z-20 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         {/* Top row */}
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
@@ -292,10 +292,10 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
             </button>
             {/* Avatar */}
             <div
-              className="w-9 h-9 rounded-full bg-[#f5a623] flex items-center justify-center ml-1"
+              className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
               title={user.email ?? 'Signed in'}
             >
-              <span className="text-black text-sm font-bold">{userInitial}</span>
+              <span className="text-white text-sm font-bold">{userInitial}</span>
             </div>
           </div>
         </div>
@@ -310,7 +310,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search..."
-              className="w-full bg-[#1a2035] border border-white/8 rounded-2xl py-2.5 pl-10 pr-9 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[#f5a623]/40 focus:bg-[#1e2640] transition-all"
+              className="w-full bg-[#16213e] border border-white/5 rounded-2xl py-2.5 pl-10 pr-9 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all"
             />
             {searchQuery ? (
               <button
@@ -351,8 +351,8 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               onClick={() => setActiveChip(chip.id)}
               className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
                 activeChip === chip.id
-                  ? 'bg-[#f5a623] text-black'
-                  : 'bg-[#1a2035] text-gray-400 hover:bg-[#1e2640] hover:text-gray-200'
+                  ? 'bg-cyan-500/20 text-cyan-400'
+                  : 'bg-[#16213e] text-gray-400 hover:bg-white/5 hover:text-gray-200'
               }`}
             >
               {chip.label}
@@ -381,8 +381,8 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
         ) : sortedItems.length === 0 && activeChip === 'favorites' ? (
           /* Empty favorites */
           <div className="flex flex-col items-center justify-center py-20 px-6">
-            <div className="w-16 h-16 rounded-full bg-[#f5a623]/10 flex items-center justify-center mb-4">
-              <Star className="w-8 h-8 text-[#f5a623]" fill="currentColor" />
+            <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center mb-4">
+              <Star className="w-8 h-8 text-cyan-400" fill="currentColor" />
             </div>
             <p className="text-white text-base font-medium text-center">No favorites here</p>
             <p className="text-gray-500 text-sm text-center mt-2 max-w-xs">
@@ -404,7 +404,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
           </div>
         ) : (
           /* Item list */
-          <div className="bg-[#141824] mx-3 mt-3 rounded-2xl overflow-hidden divide-y divide-white/5 shadow-lg">
+          <div className="bg-[#16213e] mx-3 mt-3 rounded-2xl overflow-hidden divide-y divide-white/5 shadow-lg">
             {sortedItems.map((item) => (
               <ItemCard
                 key={item.id}
@@ -431,7 +431,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       {/* ── FAB ─────────────────────────────────────────────────────── */}
       <button
         onClick={() => navigate('/add')}
-        className="fixed right-5 z-20 w-14 h-14 rounded-full bg-[#f5a623] text-black flex items-center justify-center shadow-lg shadow-[#f5a623]/30 active:scale-95 transition-transform"
+        className="fixed right-5 z-20 w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 active:scale-95 transition-transform"
         style={{ bottom: 'calc(max(env(safe-area-inset-bottom), 4px) + 64px)' }}
         aria-label="Add new password"
       >

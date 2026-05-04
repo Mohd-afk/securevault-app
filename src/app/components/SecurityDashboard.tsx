@@ -89,7 +89,7 @@ function ScoreGauge({ total, weak, reused, compromised, twoFaMissing }: {
         <path
           d={`M${toXY(START_DEG).x} ${toXY(START_DEG).y} A${ARC_R} ${ARC_R} 0 1 1 ${toXY(330).x} ${toXY(330).y}`}
           fill="none"
-          stroke="#1e2533"
+          stroke="#16213e"
           strokeWidth="12"
           strokeLinecap="round"
         />
@@ -125,7 +125,7 @@ function MetricCard({
   return (
     <button
       onClick={onClick}
-      className="bg-[#141824] rounded-2xl p-4 flex flex-col items-start hover:bg-[#1a2035] active:bg-[#1e2640] transition-colors"
+      className="bg-[#16213e] rounded-2xl p-4 flex flex-col items-start hover:bg-white/5 active:bg-white/10 transition-colors"
     >
       <div className="flex items-center justify-between w-full mb-1">
         <span className="text-white text-3xl font-bold tabular-nums">{count}</span>
@@ -185,8 +185,8 @@ function CompromisedList({
   onBack: () => void;
 }) {
   return (
-    <div className="min-h-screen bg-[#0f1117] flex flex-col">
-      <div className="sticky top-0 z-10 bg-[#0f1117]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
+    <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center gap-3 px-4 py-3">
           <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
             <ArrowLeft className="w-5 h-5" />
@@ -194,7 +194,7 @@ function CompromisedList({
           <h2 className="text-white text-lg font-semibold">Compromised</h2>
         </div>
         <div className="flex gap-4 px-4 pb-3 border-b border-white/5">
-          <button className="text-[#f5a623] border-b-2 border-[#f5a623] pb-1 text-sm font-medium">All</button>
+          <button className="text-cyan-400 border-b-2 border-cyan-400 pb-1 text-sm font-medium">All</button>
           <button className="text-gray-500 text-sm">Important</button>
           <button className="text-gray-500 text-sm">Ignored</button>
         </div>
@@ -205,7 +205,7 @@ function CompromisedList({
             key={item.id}
             className="flex items-center gap-3 px-4 py-3.5 border-b border-white/5"
           >
-            <div className="w-10 h-10 rounded-full bg-[#1a2035] flex items-center justify-center shrink-0 text-white font-bold text-base">
+            <div className="w-10 h-10 rounded-full bg-[#16213e] flex items-center justify-center shrink-0 text-white font-bold text-base">
               {item.title.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -285,8 +285,8 @@ export function SecurityDashboard() {
   // ── Checking state ───────────────────────────────────────────────────
   if (dashState === 'checking') {
     return (
-      <div className="min-h-screen bg-[#0f1117] flex flex-col">
-        <div className="sticky top-0 z-10 bg-[#0f1117]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
+      <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
+        <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
           <div className="flex items-center gap-3 px-4 py-3">
             <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
               <ArrowLeft className="w-5 h-5" />
@@ -297,11 +297,11 @@ export function SecurityDashboard() {
         <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
           {/* Shield + magnifier icon */}
           <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-[#1a2035] flex items-center justify-center">
-              <Shield className="w-12 h-12 text-[#f5a623]" />
+            <div className="w-24 h-24 rounded-full bg-[#16213e] flex items-center justify-center">
+              <Shield className="w-12 h-12 text-cyan-400" />
             </div>
-            <div className="absolute -bottom-1 -right-1 w-10 h-10 rounded-full bg-[#141824] border-2 border-[#0f1117] flex items-center justify-center">
-              <svg className="w-5 h-5 text-[#f5a623]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="absolute -bottom-1 -right-1 w-10 h-10 rounded-full bg-[#16213e] border-2 border-[#1a1a2e] flex items-center justify-center">
+              <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
@@ -316,9 +316,9 @@ export function SecurityDashboard() {
           </div>
 
           {/* Progress bar */}
-          <div className="w-full max-w-xs bg-[#1a2035] rounded-full h-2">
+          <div className="w-full max-w-xs bg-[#16213e] rounded-full h-2">
             <div
-              className="h-2 rounded-full bg-[#f5a623] transition-all duration-300"
+              className="h-2 rounded-full bg-cyan-500 transition-all duration-300"
               style={{
                 width:
                   progress.total > 0
@@ -345,9 +345,9 @@ export function SecurityDashboard() {
   const display2FA = analysis?.twoFaMissing.length ?? twoFaMissing.length;
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex flex-col">
+    <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#0f1117]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center gap-3 px-4 py-3">
           <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
             <ArrowLeft className="w-5 h-5" />
@@ -387,7 +387,7 @@ export function SecurityDashboard() {
           </button>
         )}
         {dashState === 'done' && (analysis?.unavailable.length ?? 0) > 0 && (
-          <div className="w-full mt-3 bg-[#1a2035] border border-white/10 rounded-2xl p-4 flex items-center gap-3">
+          <div className="w-full mt-3 bg-[#16213e] border border-white/10 rounded-2xl p-4 flex items-center gap-3">
             <WifiOff className="w-5 h-5 text-gray-500 shrink-0" />
             <p className="text-gray-500 text-sm">
               {analysis!.unavailable.length} password{analysis!.unavailable.length !== 1 ? 's' : ''} could not be checked (offline/timeout). Results cached for next check.

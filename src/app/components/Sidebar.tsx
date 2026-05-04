@@ -58,16 +58,16 @@ function SidebarRow({
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
         active
-          ? 'bg-[#f5a623]/15 text-[#f5a623]'
+          ? 'bg-cyan-500/15 text-cyan-400'
           : 'text-gray-300 hover:bg-white/5 active:bg-white/10'
       }`}
     >
-      <span className={`shrink-0 ${active ? 'text-[#f5a623]' : 'text-gray-400'}`}>
+      <span className={`shrink-0 ${active ? 'text-cyan-400' : 'text-gray-400'}`}>
         {icon}
       </span>
       <span className="flex-1 text-left font-medium text-sm">{label}</span>
       {count !== undefined && (
-        <span className={`text-sm tabular-nums ${active ? 'text-[#f5a623]' : 'text-gray-500'}`}>
+        <span className={`text-sm tabular-nums ${active ? 'text-cyan-400' : 'text-gray-500'}`}>
           {count}
         </span>
       )}
@@ -115,14 +115,14 @@ export function Sidebar({
 
       {/* Drawer */}
       <div
-        className={`fixed top-0 left-0 z-50 h-full w-[300px] max-w-[85vw] bg-[#111827] flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed top-0 left-0 z-50 h-full w-[300px] max-w-[85vw] bg-[#16213e] flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-[max(env(safe-area-inset-top),_16px)] pb-4 border-b border-white/5">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#f5a623] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
               <Shield className="w-4 h-4 text-white" />
             </div>
             <span className="text-white font-semibold text-lg">Safe</span>

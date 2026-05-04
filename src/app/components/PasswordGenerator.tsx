@@ -98,7 +98,7 @@ function ColoredPassword({ password, opts }: { password: string; opts: Generator
       {password.split('').map((ch, i) => {
         let color = 'text-white';
         if (DIGITS.includes(ch)) color = 'text-blue-400';
-        else if (SYMBOLS.includes(ch)) color = 'text-[#f5a623]';
+        else if (SYMBOLS.includes(ch)) color = 'text-cyan-400';
         return (
           <span key={i} className={color}>
             {ch}
@@ -130,7 +130,7 @@ function Toggle({
         onClick={() => !disabled && onChange(!value)}
         disabled={disabled}
         className={`relative w-12 h-6 rounded-full transition-all duration-200 ${
-          value && !disabled ? 'bg-[#f5a623]' : 'bg-[#2a3348]'
+          value && !disabled ? 'bg-cyan-500' : 'bg-[#2a3348]'
         } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
         role="switch"
         aria-checked={value}
@@ -225,9 +225,9 @@ export function PasswordGenerator() {
   const activeTypes = [opts.useLower, opts.useUpper, opts.useDigits, opts.useSymbols].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex flex-col">
+    <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#0f1117]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center gap-3 px-4 py-3">
           <button
             onClick={() => navigate(-1)}
@@ -240,7 +240,7 @@ export function PasswordGenerator() {
 
         {/* Tab bar: Password / Passphrase */}
         <div className="flex border-b border-white/5 px-4">
-          <button className="text-[#f5a623] border-b-2 border-[#f5a623] pb-2 pr-6 text-sm font-medium">
+          <button className="text-cyan-400 border-b-2 border-cyan-400 pb-2 pr-6 text-sm font-medium">
             Password
           </button>
           <button className="text-gray-500 pb-2 text-sm">Passphrase</button>
@@ -249,7 +249,7 @@ export function PasswordGenerator() {
 
       <div className="flex-1 overflow-y-auto px-4 pt-5 pb-24">
         {/* Password display card */}
-        <div className="bg-[#141824] rounded-2xl p-5 mb-5 min-h-[100px] flex items-center justify-center relative overflow-hidden">
+        <div className="bg-[#16213e] rounded-2xl p-5 mb-5 min-h-[100px] flex items-center justify-center relative overflow-hidden">
           {/* Ghost rows for depth effect */}
           <div className="absolute inset-x-5 top-3 opacity-10 blur-sm overflow-hidden pointer-events-none select-none">
             <p className="font-mono text-sm text-white break-all leading-loose">{password}</p>
@@ -280,7 +280,7 @@ export function PasswordGenerator() {
           onChange={(e) => set('length', Number(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none cursor-pointer mb-6"
           style={{
-            background: `linear-gradient(to right, #f5a623 0%, #f5a623 ${
+            background: `linear-gradient(to right, #06b6d4 0%, #06b6d4 ${
               ((opts.length - 6) / (64 - 6)) * 100
             }%, #2a3348 ${((opts.length - 6) / (64 - 6)) * 100}%, #2a3348 100%)`,
             // Thumb styling via CSS
@@ -288,7 +288,7 @@ export function PasswordGenerator() {
         />
 
         {/* Toggle options */}
-        <div className="bg-[#141824] rounded-2xl px-4 mb-5">
+        <div className="bg-[#16213e] rounded-2xl px-4 mb-5">
           <Toggle
             label="Lowercase"
             value={opts.useLower}
@@ -326,7 +326,7 @@ export function PasswordGenerator() {
       </div>
 
       {/* Bottom buttons */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#0f1117]/95 backdrop-blur-md border-t border-white/5 px-4 py-4 flex gap-3 pb-[max(env(safe-area-inset-bottom),_16px)]">
+      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#1a1a2e]/95 backdrop-blur-md border-t border-white/5 px-4 py-4 flex gap-3 pb-[max(env(safe-area-inset-bottom),_16px)]">
         <button
           onClick={generate}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-gray-600 text-white hover:bg-white/5 active:scale-[0.98] transition-all font-medium"
@@ -359,7 +359,7 @@ export function PasswordGenerator() {
 
       {/* Clipboard countdown strip */}
       {clipboardCountdown !== null && (
-        <div className="fixed bottom-[72px] left-0 right-0 max-w-md mx-auto flex items-center justify-center gap-1.5 py-2 bg-[#1a2035]/95 border-t border-white/5 text-gray-500 text-xs">
+        <div className="fixed bottom-[72px] left-0 right-0 max-w-md mx-auto flex items-center justify-center gap-1.5 py-2 bg-[#16213e]/95 border-t border-white/5 text-gray-500 text-xs">
           <Timer className="w-3 h-3" />
           <span>Clipboard clears in <span className="text-white font-semibold">{clipboardCountdown}s</span></span>
         </div>
@@ -372,18 +372,18 @@ export function PasswordGenerator() {
           width: 22px;
           height: 22px;
           border-radius: 50%;
-          background: #f5a623;
+          background: #06b6d4;
           cursor: pointer;
-          border: 2px solid #0f1117;
-          box-shadow: 0 0 0 2px #f5a623;
+          border: 2px solid #1a1a2e;
+          box-shadow: 0 0 0 2px #06b6d4;
         }
         input[type='range']::-moz-range-thumb {
           width: 22px;
           height: 22px;
           border-radius: 50%;
-          background: #f5a623;
+          background: #06b6d4;
           cursor: pointer;
-          border: 2px solid #0f1117;
+          border: 2px solid #1a1a2e;
         }
       `}</style>
     </div>
