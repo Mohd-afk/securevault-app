@@ -223,13 +223,38 @@ class SecureVaultAutofillService : AutofillService() {
                         android.R.id.text1, "\uD83D\uDD10 Unlock Keeguard"
                     )
 
-                    val autofillIds = (
-                        parsed.usernameNodes.mapNotNull { it.autofillId } +
-                        parsed.passwordNodes.mapNotNull { it.autofillId }
-                    ).toTypedArray()
+                    // ── KEY FIX: use Dataset.setAuthentication() NOT FillResponse.setAuthentication() ──
+                    //
+                    // FillResponse.setAuthentication() ties auth to a fill SESSION. On the first
+                    // visit to a site there is no cached session, so by the time the biometric prompt
+                    // completes the framework has already discarded the fill context and silently
+                    // drops the EXTRA_AUTHENTICATION_RESULT — forcing the user to tap a second time.
+                    //
+                    // Dataset.setAuthentication() ties auth to a specific DATASET which keeps the
+                    // fill context alive through the biometric transition. When UnlockVaultActivity
+                    // returns RESULT_OK + EXTRA_AUTHENTICATION_RESULT (a FillResponse), the AOSP
+                    // AutofillManager handles it correctly regardless of which auth type was used,
+                    // and presents the datasets immediately — on first visit AND subsequent visits.
+                    //
+                    // Reference: AOSP AutofillManager.java handleAuthenticationResultLocked()
+                    val lockedDatasetBuilder = Dataset.Builder()
+                    lockedDatasetBuilder.setAuthentication(pendingIntent.intentSender)
+
+                    // Placeholder null values for every field — required to compile the Dataset.
+                    // The real values are returned inside the FillResponse from UnlockVaultActivity.
+                    for (node in parsed.usernameNodes) {
+                        node.autofillId?.let { id ->
+                            lockedDatasetBuilder.setValue(id, null, presentation)
+                        }
+                    }
+                    for (node in parsed.passwordNodes) {
+                        node.autofillId?.let { id ->
+                            lockedDatasetBuilder.setValue(id, null, presentation)
+                        }
+                    }
 
                     val response = FillResponse.Builder()
-                        .setAuthentication(autofillIds, pendingIntent.intentSender, presentation)
+                        .addDataset(lockedDatasetBuilder.build())
                         .build()
 
                     callback.onSuccess(response)
