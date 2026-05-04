@@ -92,11 +92,21 @@ try {
   });
 
   const db = admin.firestore();
+  
+  // Calculate SHA-256 checksum of the generated zip file
+  const crypto = await import('crypto');
+  const fileBuffer = readFileSync(zipPath);
+  const hashSum = crypto.createHash('sha256');
+  hashSum.update(fileBuffer);
+  const checksum = hashSum.digest('hex');
+  console.log(`🔒 Calculated SHA-256 Checksum: ${checksum}`);
+
   // Use merge: true so we never overwrite min_apk_version or apk_download_url
   // (those fields are only set when publishing a new native APK release)
   await db.collection('app_config').doc('latest_version').set({
     version: version,
     url: `https://vault-app-ba6e2.web.app/bundles/${version}.zip`,
+    checksum: checksum,
     critical: false,
     releaseNotes: `Automated release ${version}`,
     releasedAt: new Date().toISOString()

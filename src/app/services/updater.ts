@@ -83,6 +83,7 @@ interface VersionMetadata {
   version: string;
   url: string;
   critical: boolean;
+  checksum?: string;
   releaseNotes?: string;
   minAppVersion?: string;
   releasedAt?: string;
@@ -294,6 +295,7 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
     const bundle = await CapacitorUpdater.download({
       url: remote.url,
       version: remote.version,
+      ...(remote.checksum ? { checksum: remote.checksum } : {}),
     });
 
     log.info(`[OTA_EVENT: downloaded] Bundle: ${bundle.id}`);

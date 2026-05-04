@@ -23,6 +23,7 @@ const body = {
     // OTA versioning (preserving current OTA state or bumping slightly)
     version:         { stringValue:  '3.2.0' },
     url:             { stringValue:  `https://${PROJECT}.web.app/bundles/3.2.0.zip` },
+    checksum:        { stringValue:  'MANUALLY_INSERT_SHA256_HERE_IF_NEEDED' },
     critical:        { booleanValue: false },
     releaseNotes:    { stringValue:  'v3.2.0 - Android Autofill Native Service Release' },
     releasedAt:      { stringValue:  new Date().toISOString() },
@@ -37,7 +38,7 @@ const body = {
 };
 
 console.log('Updating Firestore: app_config/latest_version to require v3.2.0 ...');
-const resp = await fetch(url + '?updateMask.fieldPaths=version&updateMask.fieldPaths=url&updateMask.fieldPaths=critical&updateMask.fieldPaths=releaseNotes&updateMask.fieldPaths=releasedAt&updateMask.fieldPaths=min_apk_version&updateMask.fieldPaths=apk_download_url&updateMask.fieldPaths=versionCode', {
+const resp = await fetch(url + '?updateMask.fieldPaths=version&updateMask.fieldPaths=url&updateMask.fieldPaths=checksum&updateMask.fieldPaths=critical&updateMask.fieldPaths=releaseNotes&updateMask.fieldPaths=releasedAt&updateMask.fieldPaths=min_apk_version&updateMask.fieldPaths=apk_download_url&updateMask.fieldPaths=versionCode', {
   method: 'PATCH',
   headers: {
     'Authorization': `Bearer ${accessToken}`,

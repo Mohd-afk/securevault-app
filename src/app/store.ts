@@ -1,5 +1,6 @@
 import {
   deriveEncryptionKey,
+  deriveTotpKey,
   deriveAuthKey,
   encryptWithKey,
   decryptWithKey,
@@ -57,6 +58,19 @@ export interface VaultItem {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+  /** Favorites system — persisted in encrypted vault */
+  isFavorite?: boolean;
+  /**
+   * TOTP secret — encrypted with a SEPARATE Argon2id key (salt: email+"totp").
+   * This means vault key compromise ≠ automatic 2FA seed compromise.
+   * Raw totpSecret is NEVER stored in the vault blob.
+   */
+  totpSecretEncrypted?: EncryptedPayload;
+  /**
+   * @deprecated Use totpSecretEncrypted. Kept only for migration of existing items.
+   * Will be removed after one release cycle.
+   */
+  totpSecret?: string;
 }
 
 export interface AppSettings {
@@ -77,6 +91,7 @@ const SETTINGS_KEY = 'securevault_settings';
 
 let _sessionPassword: string | null = null;
 let _sessionCryptoKey: CryptoKey | null = null;
+let _sessionTotpKey: CryptoKey | null = null;   // Separate TOTP key — distinct Argon2id context
 let _pendingAutoUnlockPassword: string | null = null;
 let _cachedItems: VaultItem[] | null = null;
 let _unsubscribeVault: (() => void) | null = null;
@@ -95,6 +110,7 @@ export function clearSession(): void {
   log.info('Clearing session (password, cache, listeners)');
   _sessionPassword = null;
   _sessionCryptoKey = null;
+  _sessionTotpKey = null;
   _pendingAutoUnlockPassword = null;
   _cachedItems = null;
   if (_unsubscribeVault) {
@@ -459,6 +475,16 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
   // Forward sync: Push latest web items to native DB for Autofill
   await syncToNativeVault(_cachedItems || items);
 
+  // Background TOTP migration: silently re-encrypt any items that still
+  // carry the deprecated plaintext totpSecret field. Non-blocking.
+  migrateTotpSecrets(_cachedItems || items).then((migrated) => {
+    if (migrated !== (_cachedItems || items)) {
+      notifyVaultChangeListeners();
+    }
+  }).catch((e) => {
+    log.warn('TOTP migration failed (non-fatal, will retry next unlock)', e);
+  });
+
   return _cachedItems || items;
 }
 
@@ -562,6 +588,105 @@ export async function updateVaultItem(
   log.info('Updated vault item', { id });
   await saveVaultEverywhere(items, _sessionPassword);
   return items[index];
+}
+
+/**
+ * Toggle the `isFavorite` flag on a vault item.
+ * Safe to call from any UI without re-entering master password.
+ */
+export async function toggleFavorite(id: string): Promise<boolean | null> {
+  if (!isVaultUnlocked()) throw new Error('Vault is locked');
+
+  const items = getVaultItems();
+  const index = items.findIndex((i) => i.id === id);
+  if (index === -1) {
+    log.warn('toggleFavorite: item not found', { id });
+    return null;
+  }
+
+  const newValue = !items[index].isFavorite;
+  items[index] = {
+    ...items[index],
+    isFavorite: newValue,
+    updatedAt: new Date().toISOString(),
+  };
+  _cachedItems = [...items];
+  log.info('Toggled favorite', { id, isFavorite: newValue });
+  await saveVaultEverywhere(items, _sessionPassword);
+  return newValue;
+}
+
+// ── TOTP Encryption (separate key context) ───────────────────────────
+
+/**
+ * Lazily derive and cache the TOTP key for this session.
+ * The TOTP key uses a different Argon2id salt than the vault key,
+ * so a vault key compromise does NOT automatically expose 2FA seeds.
+ */
+async function getTotpKey(): Promise<CryptoKey> {
+  if (_sessionTotpKey) return _sessionTotpKey;
+
+  if (!_sessionPassword) throw new Error('Vault is locked');
+  const email = getUserEmail();
+  if (!email) throw new Error('No email for TOTP key derivation');
+
+  log.info('Deriving TOTP key (session cache miss)');
+  _sessionTotpKey = await deriveTotpKey(_sessionPassword, email);
+  return _sessionTotpKey;
+}
+
+/**
+ * Encrypt a raw TOTP secret string using the session TOTP key.
+ * The returned EncryptedPayload is safe to store in VaultItem.
+ */
+export async function encryptTotpSecret(rawSecret: string): Promise<EncryptedPayload> {
+  if (!isVaultUnlocked()) throw new Error('Vault is locked');
+  const key = await getTotpKey();
+  return encryptWithKey(rawSecret, key);
+}
+
+/**
+ * Decrypt a previously-encrypted TOTP secret.
+ * Returns the raw Base32 TOTP seed string.
+ */
+export async function decryptTotpSecret(payload: EncryptedPayload): Promise<string> {
+  if (!isVaultUnlocked()) throw new Error('Vault is locked');
+  const key = await getTotpKey();
+  return decryptWithKey(payload, key);
+}
+
+/**
+ * One-pass migration: find any items still carrying the deprecated plaintext
+ * `totpSecret` field, re-encrypt them with the TOTP key, and save.
+ * Called automatically on vault unlock (see unlockVault).
+ */
+async function migrateTotpSecrets(items: VaultItem[]): Promise<VaultItem[]> {
+  const toMigrate = items.filter((i) => i.totpSecret && !i.totpSecretEncrypted);
+  if (toMigrate.length === 0) return items;
+
+  log.info(`Migrating ${toMigrate.length} plaintext TOTP secret(s) to separate encrypted context`);
+
+  const migratedItems = [...items];
+  for (const item of toMigrate) {
+    const idx = migratedItems.findIndex((i) => i.id === item.id);
+    if (idx === -1) continue;
+    try {
+      const encrypted = await encryptTotpSecret(item.totpSecret!);
+      migratedItems[idx] = {
+        ...migratedItems[idx],
+        totpSecretEncrypted: encrypted,
+        totpSecret: undefined, // Remove deprecated field
+        updatedAt: new Date().toISOString(),
+      };
+    } catch (e) {
+      log.error('Failed to migrate TOTP secret for item', { id: item.id, error: e });
+    }
+  }
+
+  log.info('TOTP migration complete — saving updated vault');
+  _cachedItems = migratedItems;
+  await saveVaultEverywhere(migratedItems, _sessionPassword);
+  return migratedItems;
 }
 
 export async function deleteVaultItem(id: string): Promise<void> {

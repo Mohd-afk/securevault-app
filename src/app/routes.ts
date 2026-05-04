@@ -8,6 +8,8 @@ import { TrashBin } from './components/TrashBin';
 import { TermsPage } from './components/legal/TermsPage';
 import { PrivacyPage } from './components/legal/PrivacyPage';
 import { LicensePage } from './components/legal/LicensePage';
+import { SecurityDashboard } from './components/SecurityDashboard';
+import { PasswordGenerator } from './components/PasswordGenerator';
 
 export const router = createBrowserRouter([
   // Public legal pages — accessible without login
@@ -24,6 +26,9 @@ export const router = createBrowserRouter([
       { path: 'edit/:id', Component: AddEditForm },
       { path: 'settings', Component: Settings },
       { path: 'trash', Component: TrashBin },
+      { path: 'security', Component: SecurityDashboard },
+      { path: 'generator', Component: PasswordGenerator },
     ],
   },
 ]);
+

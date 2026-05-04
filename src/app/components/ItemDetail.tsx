@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check, RotateCcw, AlertTriangle } from 'lucide-react';
-import { getVaultItem, deleteVaultItem, permanentlyDeleteVaultItem, restoreVaultItem, type ItemType } from '../store';
+import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check, RotateCcw, AlertTriangle, Star } from 'lucide-react';
+import { getVaultItem, deleteVaultItem, permanentlyDeleteVaultItem, restoreVaultItem, toggleFavorite, type ItemType } from '../store';
 import { format, differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 import { Share } from '@capacitor/share';
@@ -28,12 +28,22 @@ const typeColors: Record<ItemType, string> = {
 export function ItemDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+
+  const item = id ? getVaultItem(id) : undefined;
+
   const [showPassword, setShowPassword] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [isFav, setIsFav] = useState(item?.isFavorite ?? false);
 
-  const item = id ? getVaultItem(id) : undefined;
+  const handleToggleFavorite = useCallback(async () => {
+    if (!item) return;
+    setIsFav((p) => !p); // optimistic
+    const result = await toggleFavorite(item.id);
+    if (result === null) setIsFav(item.isFavorite ?? false); // revert on error
+  }, [item]);
+
 
   if (!item) {
     return (
@@ -108,6 +118,13 @@ export function ItemDetail() {
             {isTrashed ? <Trash2 className="w-5 h-5 text-red-400" /> : typeIcons[item.type]}
           </div>
           <h2 className="text-white truncate flex-1">{item.title}</h2>
+          <button
+            onClick={handleToggleFavorite}
+            className={`p-2 rounded-lg transition-colors ${isFav ? 'text-[#f5a623]' : 'text-gray-500 hover:text-gray-300'}`}
+            aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <Star className="w-5 h-5" fill={isFav ? 'currentColor' : 'none'} />
+          </button>
         </div>
       </div>
 

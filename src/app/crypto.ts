@@ -134,6 +134,37 @@ export async function deriveEncryptionKey(masterPassword: string, email: string)
 }
 
 /**
+ * Derives the TOTP Encryption Key — a separate Argon2id derivation
+ * using a different salt than the vault key.
+ *
+ * Security rationale: TOTP seeds combined with passwords enable full
+ * account takeover. By encrypting them with a key derived from a
+ * DIFFERENT salt, a vault key compromise does not automatically expose
+ * 2FA seeds. An attacker must run Argon2id twice with different salts.
+ *
+ * Salt: email + "totp" (distinct from vault salt "email + vault")
+ */
+export async function deriveTotpKey(masterPassword: string, email: string): Promise<CryptoKey> {
+    log.debug('Deriving TOTP key (Argon2id, separate context)', { email });
+    const pwdBytes = passwordToBytes(masterPassword);
+    const salt = email.toLowerCase().trim() + 'totp';
+
+    return withScrubbing(pwdBytes, async (buf) => {
+        const rawKey = await deriveRawArgon2id(buf, salt);
+        const key = await crypto.subtle.importKey(
+            'raw',
+            rawKey.buffer.slice(0) as ArrayBuffer,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt'],
+        );
+        scrub(rawKey);
+        log.debug('TOTP key derived successfully');
+        return key;
+    });
+}
+
+/**
  * Drives the Argon2id key derivation and extracts the RAW DEK bytes as Base64.
  * Used ONLY once during Biometric Enable to pass to the native KeyStore wrapper.
  */
