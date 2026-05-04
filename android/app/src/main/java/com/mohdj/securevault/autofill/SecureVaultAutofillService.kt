@@ -201,6 +201,7 @@ class SecureVaultAutofillService : AutofillService() {
                                 Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
                                 Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
                         putExtra("DOMAIN", normalizedIdentity)
+                        putExtra("RAW_IDENTITY", rawIdentity)   // raw subdomain for Tier-2 fallback
                         putExtra("IDENTITY_TYPE", identityType)
                         val uIds = parsed.usernameNodes.mapNotNull { it.autofillId }
                         val pIds = parsed.passwordNodes.mapNotNull { it.autofillId }
@@ -236,8 +237,40 @@ class SecureVaultAutofillService : AutofillService() {
                 }
 
                 // ── 6. Vault unlocked: find matching credentials ─────────────
-                val matches: List<VaultItemEntity> = vaultRepository.findByDomain(normalizedIdentity)
-                Log.i(TAG, "AUTOFILL_MATCH_COUNT identity=$normalizedIdentity count=${matches.size}")
+                //
+                // PRIMARY: SQL LIKE scan by normalised domain (fast path).
+                // FALLBACK: If no rows returned, load ALL active items and do
+                //           in-memory domain matching. This handles cases where:
+                //   - The SQL LIKE missed the row (e.g. unusual URI format)
+                //   - The row exists but the uris column contains the full
+                //     subdomain (e.g. id.dreamapply.com) but the query used
+                //     only the root (dreamapply.com) — they are substrings so
+                //     LIKE should catch it, but the fallback guarantees it.
+                var matches: List<VaultItemEntity> = vaultRepository.findByDomain(normalizedIdentity)
+                Log.i(TAG, "AUTOFILL_MATCH_COUNT identity=$normalizedIdentity sqlCount=${matches.size}")
+
+                if (matches.isEmpty()) {
+                    // Also try the raw subdomain directly (e.g. "id.dreamapply.com")
+                    // in case normalised identity differs from what was stored
+                    if (normalizedIdentity != rawIdentity) {
+                        matches = vaultRepository.findByDomain(rawIdentity)
+                        Log.i(TAG, "AUTOFILL_FALLBACK_RAW rawIdentity=$rawIdentity count=${matches.size}")
+                    }
+                }
+
+                if (matches.isEmpty()) {
+                    // Full-table in-memory fallback: load everything and check each item
+                    Log.w(TAG, "AUTOFILL_FALLBACK_FULL_SCAN: SQL LIKE returned 0 for $normalizedIdentity — scanning all items")
+                    val allItems = vaultRepository.getAllActive()
+                    Log.i(TAG, "AUTOFILL_FALLBACK_FULL_SCAN totalItems=${allItems.size}")
+                    matches = allItems.filter { item ->
+                        val uris = parseUriList(item.uris)
+                        uris.any { uri ->
+                            domainMatcher.calculateConfidence(rawIdentity, uri) >= 0.8
+                        }
+                    }
+                    Log.i(TAG, "AUTOFILL_FALLBACK_FULL_SCAN matched=${matches.size}")
+                }
 
                 // Security: For web contexts, filter out low-confidence domain matches.
                 // For package contexts, trust any match — the package name is an exact identity.

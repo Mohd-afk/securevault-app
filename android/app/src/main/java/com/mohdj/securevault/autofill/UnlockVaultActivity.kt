@@ -27,6 +27,7 @@ import androidx.annotation.RequiresApi
 import androidx.fragment.app.FragmentActivity
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import com.mohdj.securevault.autofill.DomainMatcher
 import com.mohdj.securevault.security.BiometricKeyManager
 import com.mohdj.securevault.security.BiometricVaultUnlocker
 import com.mohdj.securevault.vault.VaultRepository
@@ -184,7 +185,32 @@ class UnlockVaultActivity : FragmentActivity() {
      */
     private suspend fun buildAndReturnFillResponse() {
         val repository = VaultRepository(applicationContext)
-        val matches = repository.findByDomain(domain)
+        val domainMatcher = DomainMatcher(applicationContext)
+
+        // ── Three-tier credential lookup ────────────────────────────────────────
+        // Tier 1: SQL LIKE scan by normalised domain (fast path)
+        var matches = repository.findByDomain(domain)
+        Log.i(TAG, "Tier-1 SQL LIKE: domain=$domain count=${matches.size}")
+
+        // Tier 2: Try raw webDomain directly (in case subdomain != normalised root)
+        if (matches.isEmpty()) {
+            val rawDomain = intent.getStringExtra("RAW_IDENTITY") ?: domain
+            if (rawDomain != domain) {
+                matches = repository.findByDomain(rawDomain)
+                Log.i(TAG, "Tier-2 raw domain: rawDomain=$rawDomain count=${matches.size}")
+            }
+        }
+
+        // Tier 3: Full in-memory scan — load all items and match by confidence
+        if (matches.isEmpty()) {
+            Log.w(TAG, "Tier-3 full-scan: SQL returned 0 for domain=$domain — scanning all items")
+            val allItems = repository.getAllActive()
+            matches = allItems.filter { item ->
+                val uris = parseUriListFromJson(item.uris)
+                uris.any { uri -> domainMatcher.calculateConfidence(domain, uri) >= 0.8 }
+            }
+            Log.i(TAG, "Tier-3 full-scan: totalItems=${allItems.size} matched=${matches.size}")
+        }
 
         if (matches.isEmpty()) {
             Log.w(TAG, "No matches found for domain=$domain after unlock")
@@ -277,5 +303,25 @@ class UnlockVaultActivity : FragmentActivity() {
     private fun finishWithCancel() {
         setResult(RESULT_CANCELED)
         finishAndRemoveTask()
+    }
+
+    /**
+     * Parses the uris JSON array column (e.g. '["https://id.dreamapply.com"]')
+     * into individual URL strings for in-memory domain matching.
+     */
+    private fun parseUriListFromJson(urisJson: String): List<String> {
+        val trimmed = urisJson.trim()
+        if (trimmed.startsWith("[")) {
+            try {
+                return trimmed
+                    .removePrefix("[").removeSuffix("]")
+                    .split(",")
+                    .map { it.trim().removeSurrounding("\"") }
+                    .filter { it.isNotBlank() }
+            } catch (e: Exception) {
+                Log.w(TAG, "parseUriListFromJson failed, raw=${trimmed.take(80)}")
+            }
+        }
+        return if (trimmed.isNotBlank()) listOf(trimmed) else emptyList()
     }
 }
