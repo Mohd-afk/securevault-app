@@ -1201,24 +1201,8 @@ export function Settings() {
                     </button>
                     {expandedCategories.data && (
                         <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
-                        {/* Trash Bin */}
-                        <div>
-                            <button
-                                onClick={() => navigate('/trash')}
-                                className="w-full flex items-center gap-3"
-                            >
-                                <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                                    <Trash2 className="w-4 h-4 text-orange-400" />
-                                </div>
-                                <div className="text-left">
-                                    <span className="text-white text-sm block">Trash Bin</span>
-                                    <span className="text-gray-500 text-xs">View or restore deleted passwords</span>
-                                </div>
-                            </button>
-                        </div>
-
                         {/* Import Passwords */}
-                        <div className="pt-4 border-t border-white/5">
+                        <div>
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={importing}
