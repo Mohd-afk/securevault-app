@@ -238,13 +238,6 @@ export function PasswordGenerator() {
           <h2 className="text-white text-lg font-semibold">Password Generator</h2>
         </div>
 
-        {/* Tab bar: Password / Passphrase */}
-        <div className="flex border-b border-white/5 px-4">
-          <button className="text-cyan-400 border-b-2 border-cyan-400 pb-2 pr-6 text-sm font-medium">
-            Password
-          </button>
-          <button className="text-gray-500 pb-2 text-sm">Passphrase</button>
-        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pt-5 pb-24">
@@ -320,9 +313,13 @@ export function PasswordGenerator() {
           />
         </div>
 
-        <p className="text-gray-600 text-xs text-center mb-6">
-          Excluded similar: i l 1 L o 0 O I
-        </p>
+        <div className="min-h-[24px] mb-6 flex items-center justify-center">
+          {opts.excludeSimilar && (
+            <p className="text-gray-600 text-xs text-center">
+              Excluded similar: i l 1 L o 0 O I
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Bottom buttons */}
