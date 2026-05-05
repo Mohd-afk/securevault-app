@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { getVaultItems, type VaultItem } from '../store';
 import { checkBatch, type HibpBatchResult } from '../services/hibpCache';
+import { BottomNav } from './BottomNav';
 
 // ── Security analysis types ───────────────────────────────────────────
 interface SecurityAnalysis {
@@ -41,8 +42,7 @@ function ScoreGauge({ total, weak, reused, compromised, twoFaMissing }: {
   const ARC_R = 70;
   const CX = 90;
   const CY = 90;
-  const START_DEG = 210;
-  const END_DEG = -30; // = 330
+  const START_DEG = 240;
   const SPAN = 240;
 
   const toXY = (deg: number) => {
@@ -87,7 +87,7 @@ function ScoreGauge({ total, weak, reused, compromised, twoFaMissing }: {
       <svg width="180" height="140" viewBox="0 0 180 140">
         {/* Track */}
         <path
-          d={`M${toXY(START_DEG).x} ${toXY(START_DEG).y} A${ARC_R} ${ARC_R} 0 1 1 ${toXY(330).x} ${toXY(330).y}`}
+          d={`M${toXY(START_DEG).x} ${toXY(START_DEG).y} A${ARC_R} ${ARC_R} 0 1 1 ${toXY(START_DEG + SPAN).x} ${toXY(START_DEG + SPAN).y}`}
           fill="none"
           stroke="#16213e"
           strokeWidth="12"
@@ -176,55 +176,55 @@ function analyzeVault(items: VaultItem[]): Omit<SecurityAnalysis, 'compromised' 
   return { weak, reused, twoFaMissing, total: active.length };
 }
 
-// ── Compromised list screen ───────────────────────────────────────────
-function CompromisedList({
+// ── Detail list screen ───────────────────────────────────────────
+function DetailListScreen({
+  title,
   items,
   onBack,
 }: {
+  title: string;
   items: VaultItem[];
   onBack: () => void;
 }) {
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-3 px-4 py-3 pb-4">
           <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h2 className="text-white text-lg font-semibold">Compromised</h2>
-        </div>
-        <div className="flex gap-4 px-4 pb-3 border-b border-white/5">
-          <button className="text-cyan-400 border-b-2 border-cyan-400 pb-1 text-sm font-medium">All</button>
-          <button className="text-gray-500 text-sm">Important</button>
-          <button className="text-gray-500 text-sm">Ignored</button>
+          <h2 className="text-white text-lg font-semibold">{title}</h2>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center gap-3 px-4 py-3.5 border-b border-white/5"
-          >
-            <div className="w-10 h-10 rounded-full bg-[#16213e] flex items-center justify-center shrink-0 text-white font-bold text-base">
-              {item.title.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-medium truncate">
-                {item.url
-                  ? new URL(item.url.startsWith('http') ? item.url : `https://${item.url}`).hostname
-                  : item.title}
-              </p>
-              <p className="text-gray-500 text-xs truncate">{item.username || item.url}</p>
-            </div>
-            <button className="p-1.5 text-gray-600 hover:text-gray-400">
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-                <circle cx="12" cy="5" r="1.5" />
-                <circle cx="12" cy="12" r="1.5" />
-                <circle cx="12" cy="19" r="1.5" />
-              </svg>
+      <div className="flex-1 overflow-y-auto pb-24">
+        {items.map((item) => {
+          let host = item.title;
+          try {
+            if (item.url) host = new URL(item.url.startsWith('http') ? item.url : `https://${item.url}`).hostname;
+          } catch {}
+          return (
+            <button
+              key={item.id}
+              onClick={() => navigate('/item/' + item.id)}
+              className="w-full flex items-center gap-3 px-4 py-3.5 border-b border-white/5 hover:bg-white/5 text-left transition-colors"
+            >
+              <div className="w-10 h-10 rounded-full bg-[#16213e] flex items-center justify-center shrink-0 text-white font-bold text-base">
+                {item.title.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium truncate">{host}</p>
+                <p className="text-gray-500 text-xs truncate">{item.username || item.url}</p>
+              </div>
             </button>
+          );
+        })}
+        {items.length === 0 && (
+          <div className="py-20 text-center text-gray-500">
+            <ShieldCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>No issues found.</p>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
@@ -238,7 +238,9 @@ export function SecurityDashboard() {
   const navigate = useNavigate();
   const [dashState, setDashState] = useState<DashboardState>('idle');
   const [progress, setProgress] = useState({ checked: 0, total: 0 });
-  const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [lastChecked, setLastChecked] = useState<string | null>(
+    () => localStorage.getItem('keeguard_security_last_checked')
+  );
   const [analysis, setAnalysis] = useState<SecurityAnalysis | null>(null);
   const [detailView, setDetailView] = useState<DetailView>(null);
 
@@ -268,15 +270,25 @@ export function SecurityDashboard() {
       unavailable: active.filter((i) => unavailableIds.has(i.id)),
       total,
     });
-    setLastChecked(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setLastChecked(timeStr);
+    localStorage.setItem('keeguard_security_last_checked', timeStr);
     setDashState('done');
   }, [items, weak, reused, twoFaMissing, total]);
 
   // ── Detail view ─────────────────────────────────────────────────────
-  if (detailView === 'compromised' && analysis) {
+  if (detailView) {
+    let listItems: VaultItem[] = [];
+    let title = '';
+    if (detailView === 'compromised') { listItems = analysis?.compromised || []; title = 'Compromised'; }
+    if (detailView === 'weak') { listItems = analysis?.weak || weak; title = 'Weak'; }
+    if (detailView === 'reused') { listItems = analysis?.reused || reused; title = 'Reused'; }
+    if (detailView === '2fa') { listItems = analysis?.twoFaMissing || twoFaMissing; title = '2FA Missing'; }
+    
     return (
-      <CompromisedList
-        items={analysis.compromised}
+      <DetailListScreen
+        title={title}
+        items={listItems}
         onBack={() => setDetailView(null)}
       />
     );
@@ -439,6 +451,14 @@ export function SecurityDashboard() {
 
         <p className="text-center text-gray-600 text-xs mt-5">Showing all passwords</p>
       </div>
+
+      <BottomNav
+        active="security"
+        onChange={(tab) => {
+          if (tab === 'safe') navigate('/');
+          else if (tab === 'tools') navigate('/settings');
+        }}
+      />
     </div>
   );
 }
