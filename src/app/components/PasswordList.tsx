@@ -16,6 +16,8 @@ import {
   AlignJustify,
   ShieldCheck,
   Wrench,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import {
   getVaultItems,
@@ -73,7 +75,6 @@ function BottomNav({ active, onChange }: BottomNavProps) {
     { id: 'safe', icon: <Shield className="w-5 h-5" />, label: 'Safe' },
     { id: 'security', icon: <ShieldCheck className="w-5 h-5" />, label: 'Security' },
     { id: 'tools', icon: <Wrench className="w-5 h-5" />, label: 'Tools' },
-    { id: 'search', icon: <Search className="w-5 h-5" />, label: 'Search' },
   ];
   return (
     <div
@@ -172,6 +173,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<BottomTab>('safe');
   const [favLoading, setFavLoading] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   // Live vault sync
   useEffect(() => {
@@ -230,6 +232,18 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   // 4. Sort
   const { sortedItems, sortOption, setSortOption } = useSort(searchFiltered);
 
+  // Group by type
+  const grouped = useMemo(() => {
+    const map = new Map<string, VaultItem[]>();
+    sortedItems.forEach(item => {
+      const type = item.type;
+      const existing = map.get(type) || [];
+      existing.push(item);
+      map.set(type, existing);
+    });
+    return map;
+  }, [sortedItems]);
+
   // ── Favorite toggle ──────────────────────────────────────────────────
   const handleFavorite = useCallback(async (id: string) => {
     setFavLoading(id);
@@ -282,14 +296,6 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
             <h1 className="text-white text-xl font-semibold">Safe</h1>
           </div>
           <div className="flex items-center gap-1">
-            {/* Sort icon */}
-            <button
-              onClick={() => setSortModalOpen(true)}
-              className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
-              aria-label="Sort options"
-            >
-              <SlidersHorizontal className="w-5 h-5" />
-            </button>
             {/* Avatar */}
             <div
               className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
@@ -404,16 +410,39 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
           </div>
         ) : (
           /* Item list */
-          <div className="bg-[#16213e] mx-3 mt-3 rounded-2xl overflow-hidden divide-y divide-white/5 shadow-lg">
-            {sortedItems.map((item) => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                onNavigate={(id) => navigate(`/item/${id}`)}
-                onFavorite={handleFavorite}
-                favLoading={favLoading}
-              />
-            ))}
+          <div className="px-3 space-y-4 mt-3">
+            {Array.from(grouped.entries()).map(([type, typeItems]) => {
+              const isExpanded = expandedCategories[type] !== false; // Default true
+              return (
+                <div key={type}>
+                  <button
+                    onClick={() => setExpandedCategories(prev => ({ ...prev, [type]: !isExpanded }))}
+                    className="w-full flex items-center justify-between mb-2 px-2 hover:bg-white/5 rounded-lg py-1.5 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500 text-xs uppercase tracking-wider font-semibold">{type}</span>
+                      <span className="text-gray-600 text-xs">({typeItems.length})</span>
+                    </div>
+                    <div className="text-gray-500 group-hover:text-gray-300 transition-colors">
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="bg-[#16213e] rounded-2xl overflow-hidden divide-y divide-white/5 shadow-lg">
+                      {typeItems.map((item) => (
+                        <ItemCard
+                          key={item.id}
+                          item={item}
+                          onNavigate={(id) => navigate(`/item/${id}`)}
+                          onFavorite={handleFavorite}
+                          favLoading={favLoading}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
