@@ -7,8 +7,8 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
     getAuth,
+    initializeAuth,
     indexedDBLocalPersistence,
-    setPersistence,
     type Auth,
 } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
@@ -55,34 +55,38 @@ export async function initFirebase(): Promise<void> {
     console.log('[Firebase] Starting initialization...');
 
     const firebaseConfig = {
-        apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-        authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-        projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-        storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-        appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+        apiKey:            import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDsAH9mhH9IFYLyEjqKfy7uTnNRbU7Mg00',
+        authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'vault-app-ba6e2.firebaseapp.com',
+        projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID || 'vault-app-ba6e2',
+        storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'vault-app-ba6e2.firebasestorage.app',
+        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '1087322543080',
+        appId:             import.meta.env.VITE_FIREBASE_APP_ID || '1:1087322543080:web:a1fa522bdcb3e3518b8a5d',
     };
 
     // 1. Init app
     _app  = initializeApp(firebaseConfig);
-    _auth = getAuth(_app);
-    _db   = getFirestore(_app);
-    console.log('[Firebase] App + Auth + Firestore created for project:', firebaseConfig.projectId);
 
-    // 2. Set persistence — on native use IndexedDB.
-    //    NO silent fallback: if this fails, we need to know exactly why.
+    // 2. Init Auth with appropriate persistence
     if (Capacitor.isNativePlatform()) {
         try {
-            await setPersistence(_auth, indexedDBLocalPersistence);
-            console.log('[Firebase] Auth persistence set to IndexedDB (native)');
+            // Using initializeAuth instead of getAuth + setPersistence
+            // This prevents IndexedDB initialization from hanging the boot sequence
+            _auth = initializeAuth(_app, {
+                persistence: indexedDBLocalPersistence
+            });
+            console.log('[Firebase] Auth initialized with IndexedDB persistence (native)');
         } catch (err) {
-            // Log in full — do NOT silently fallback.
-            console.error('[Firebase] CRITICAL: IndexedDB persistence failed. Auth state will be lost on reload.', err);
-            // Re-throw so the boot sequence can decide how to handle.
+            console.error('[Firebase] CRITICAL: Auth initialization failed on native. Auth state will be lost on reload.', err);
             throw err;
         }
+    } else {
+        _auth = getAuth(_app);
+        console.log('[Firebase] Auth initialized with default browser persistence');
     }
-    // On web (dev/browser), leave default persistence (localStorage) untouched.
+
+    // 3. Init Firestore
+    _db = getFirestore(_app);
+    console.log('[Firebase] App + Auth + Firestore created for project:', firebaseConfig.projectId);
 
     _initialized = true;
     console.log('[Firebase] Initialization complete.');

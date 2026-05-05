@@ -127,29 +127,46 @@ export default function App() {
 
   return (
     <div className="dark min-h-screen bg-[#1a1a2e]">
-      {bootError && (
+      {bootError ? (
         <div style={{
-          background: '#7f1d1d',
-          color: '#fca5a5',
-          padding: '8px 16px',
-          fontSize: '12px',
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
           textAlign: 'center',
+          gap: '16px'
         }}>
-          ⚠️ {bootError}
+          <div style={{
+            background: '#7f1d1d',
+            color: '#fca5a5',
+            padding: '16px 24px',
+            borderRadius: '12px',
+            border: '1px solid #b91c1c',
+            maxWidth: '400px'
+          }}>
+            <h2 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 600 }}>Application Error</h2>
+            <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.5' }}>{bootError}</p>
+            <p style={{ margin: '12px 0 0 0', fontSize: '12px', opacity: 0.8 }}>Please check your network connection and reload the application.</p>
+          </div>
         </div>
+      ) : (
+        <>
+          <RouterProvider router={router} />
+          <Toaster
+            theme="dark"
+            position="top-center"
+            toastOptions={{
+              style: {
+                background: '#16213e',
+                border: '1px solid rgba(255,255,255,0.05)',
+                color: '#fff',
+              },
+            }}
+          />
+        </>
       )}
-      <RouterProvider router={router} />
-      <Toaster
-        theme="dark"
-        position="top-center"
-        toastOptions={{
-          style: {
-            background: '#16213e',
-            border: '1px solid rgba(255,255,255,0.05)',
-            color: '#fff',
-          },
-        }}
-      />
     </div>
   );
 }
