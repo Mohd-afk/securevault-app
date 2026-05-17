@@ -24,12 +24,11 @@ export type SidebarFilter =
   | 'cards'
   | 'notes'
   | 'ids'
-  | 'label-business'
-  | 'label-private'
   | 'expiring'
   | 'archived'
   | 'templates'
-  | 'trash';
+  | 'trash'
+  | string;
 
 interface SidebarProps {
   open: boolean;
@@ -206,20 +205,16 @@ export function Sidebar({
             <p className="text-gray-500 text-xs uppercase tracking-widest mb-1">Labels</p>
           </div>
           <div className="px-2 space-y-0.5">
-            <SidebarRow
-              icon={<Tag className="w-5 h-5" />}
-              label="Business"
-              count={0}
-              active={activeFilter === 'label-business'}
-              onClick={() => select('label-business')}
-            />
-            <SidebarRow
-              icon={<Tag className="w-5 h-5" />}
-              label="Private"
-              count={0}
-              active={activeFilter === 'label-private'}
-              onClick={() => select('label-private')}
-            />
+            {Array.from(new Set(activeItems.flatMap(i => i.labels || []))).sort().map(label => (
+              <SidebarRow
+                key={`label-${label}`}
+                icon={<Tag className="w-5 h-5" />}
+                label={label}
+                count={activeItems.filter(i => i.labels?.includes(label)).length}
+                active={activeFilter === `label-${label}`}
+                onClick={() => select(`label-${label}`)}
+              />
+            ))}
             <SidebarRow
               icon={<Pencil className="w-5 h-5" />}
               label="Manage labels"

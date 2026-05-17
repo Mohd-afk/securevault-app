@@ -197,7 +197,7 @@ function DetailListScreen({
           <h2 className="text-white text-lg font-semibold">{title}</h2>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_80px)]">
         {items.map((item) => {
           let host = item.title;
           try {
@@ -368,7 +368,7 @@ export function SecurityDashboard() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pt-6 pb-24">
+      <div className="flex-1 overflow-y-auto px-4 pt-6 pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_80px)]">
         {/* Gauge */}
         <ScoreGauge
           total={total}
@@ -456,7 +456,7 @@ export function SecurityDashboard() {
         active="security"
         onChange={(tab) => {
           if (tab === 'safe') navigate('/');
-          else if (tab === 'tools') navigate('/settings');
+          else if (tab === 'tools') navigate('/generator');
         }}
       />
     </div>

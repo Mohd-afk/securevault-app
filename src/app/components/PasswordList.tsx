@@ -18,11 +18,17 @@ import {
   Wrench,
   ChevronUp,
   ChevronDown,
+  Trash2,
+  Tag,
+  CheckCircle2,
+  Circle,
+  MoreVertical,
 } from 'lucide-react';
 import {
-  getVaultItems,
   addVaultChangeListener,
   toggleFavorite,
+  updateVaultItem,
+  deleteVaultItem,
   type VaultItem,
 } from '../store';
 import { useSmartSearch } from '../hooks/useSmartSearch';
@@ -64,20 +70,42 @@ const typeColors: Record<string, string> = {
 
 import { BottomNav, type BottomTab } from './BottomNav';
 
-// ── Password Item Card ─────────────────────────────────────────────────
 interface ItemCardProps {
   item: VaultItem;
   onNavigate: (id: string) => void;
   onFavorite: (id: string) => void;
   favLoading: string | null;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
+  onLongPress?: (id: string) => void;
 }
 
-function ItemCard({ item, onNavigate, onFavorite, favLoading }: ItemCardProps) {
+function ItemCard({ item, onNavigate, onFavorite, favLoading, isSelectionMode, isSelected, onToggleSelect, onLongPress }: ItemCardProps) {
+  let timer: any;
+  const handleTouchStart = () => {
+    timer = setTimeout(() => { if (onLongPress) onLongPress(item.id); }, 500);
+  };
+  const handleTouchEnd = () => { clearTimeout(timer); };
+
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 active:bg-white/10 transition-colors relative group">
+    <div 
+      className={`flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 active:bg-white/10 transition-colors relative group ${isSelected ? 'bg-cyan-500/10 hover:bg-cyan-500/20' : ''}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onMouseDown={handleTouchStart}
+      onMouseUp={handleTouchEnd}
+      onMouseLeave={handleTouchEnd}
+    >
+      {isSelectionMode && (
+        <button onClick={() => onToggleSelect && onToggleSelect(item.id)} className="p-1 shrink-0">
+          {isSelected ? <CheckCircle2 className="w-5 h-5 text-cyan-400" /> : <Circle className="w-5 h-5 text-gray-500" />}
+        </button>
+      )}
+
       {/* Icon */}
       <button
-        onClick={() => onNavigate(item.id)}
+        onClick={() => isSelectionMode ? onToggleSelect && onToggleSelect(item.id) : onNavigate(item.id)}
         className="flex items-center gap-3 flex-1 min-w-0 text-left"
       >
         <div
@@ -95,25 +123,27 @@ function ItemCard({ item, onNavigate, onFavorite, favLoading }: ItemCardProps) {
         </div>
       </button>
 
-      {/* Star button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onFavorite(item.id);
-        }}
-        disabled={favLoading === item.id}
-        className={`p-2 rounded-lg transition-all shrink-0 ${
-          item.isFavorite
-            ? 'text-cyan-400'
-            : 'text-gray-600 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
-        }`}
-        aria-label={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-      >
-        <Star
-          className="w-4 h-4"
-          fill={item.isFavorite ? 'currentColor' : 'none'}
-        />
-      </button>
+      {/* Star button (hide in selection mode) */}
+      {!isSelectionMode && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onFavorite(item.id);
+          }}
+          disabled={favLoading === item.id}
+          className={`p-2 rounded-lg transition-all shrink-0 ${
+            item.isFavorite
+              ? 'text-cyan-400'
+              : 'text-gray-600 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+          }`}
+          aria-label={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Star
+            className="w-4 h-4"
+            fill={item.isFavorite ? 'currentColor' : 'none'}
+          />
+        </button>
+      )}
     </div>
   );
 }
@@ -136,6 +166,12 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const [activeTab, setActiveTab] = useState<BottomTab>('safe');
   const [favLoading, setFavLoading] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
+  // Multi-select state
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showLabelDialog, setShowLabelDialog] = useState(false);
+  const [newLabelName, setNewLabelName] = useState('');
 
   // Live vault sync
   useEffect(() => {
@@ -167,6 +203,10 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   // 1. Sidebar filter
   const sidebarFiltered = useMemo(() => {
     if (sidebarFilter === 'trash') return items.filter((i) => !!i.deletedAt);
+    if (sidebarFilter.startsWith('label-')) {
+      const label = sidebarFilter.replace('label-', '');
+      return activeVaultItems.filter((i) => i.labels?.includes(label));
+    }
     return activeVaultItems;
   }, [activeVaultItems, sidebarFilter, items]);
 
@@ -220,6 +260,49 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const userInitial = (user.displayName?.[0] || user.email?.[0] || 'U').toUpperCase();
   const totalActive = activeVaultItems.length;
 
+  const handleToggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const handleLongPress = (id: string) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedIds(new Set([id]));
+    }
+  };
+
+  const handleBulkLabel = async () => {
+    if (!newLabelName.trim() || selectedIds.size === 0) return;
+    const label = newLabelName.trim();
+    for (const id of Array.from(selectedIds)) {
+      const item = items.find(i => i.id === id);
+      if (item) {
+        const currentLabels = item.labels || [];
+        if (!currentLabels.includes(label)) {
+          await updateVaultItem(id, { labels: [...currentLabels, label] });
+        }
+      }
+    }
+    setItems(getVaultItems());
+    setShowLabelDialog(false);
+    setNewLabelName('');
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Move ${selectedIds.size} items to recycle bin?`)) return;
+    for (const id of Array.from(selectedIds)) {
+      await deleteVaultItem(id);
+    }
+    setItems(getVaultItems());
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
@@ -246,27 +329,61 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-20 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         {/* Top row */}
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
+        {isSelectionMode ? (
+          <div className="flex items-center justify-between px-4 py-3 bg-cyan-500/10">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
+                className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+                aria-label="Cancel selection"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <h1 className="text-white text-lg font-semibold">{selectedIds.size} selected</h1>
+            </div>
             <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
-              aria-label="Open menu"
+              onClick={() => {
+                if (selectedIds.size === sortedItems.length) {
+                  setSelectedIds(new Set());
+                } else {
+                  setSelectedIds(new Set(sortedItems.map(i => i.id)));
+                }
+              }}
+              className="text-cyan-400 font-medium text-sm px-2"
             >
-              <AlignJustify className="w-5 h-5" />
+              {selectedIds.size === sortedItems.length ? 'Deselect All' : 'Select All'}
             </button>
-            <h1 className="text-white text-xl font-semibold">Safe</h1>
           </div>
-          <div className="flex items-center gap-1">
-            {/* Avatar */}
-            <div
-              className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
-              title={user.email ?? 'Signed in'}
-            >
-              <span className="text-white text-sm font-bold">{userInitial}</span>
+        ) : (
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+                aria-label="Open menu"
+              >
+                <AlignJustify className="w-5 h-5" />
+              </button>
+              <h1 className="text-white text-xl font-semibold">Safe</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsSelectionMode(true)}
+                className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+                title="Select Items"
+              >
+                <CheckCircle2 className="w-5 h-5" />
+              </button>
+              {/* Avatar */}
+              <div
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
+                title={user.email ?? 'Signed in'}
+              >
+                <span className="text-white text-sm font-bold">{userInitial}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Smart Search */}
         <div className="px-4 pb-3">
@@ -330,7 +447,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       </div>
 
       {/* ── Content ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto pb-28">
+      <div className="flex-1 overflow-y-auto pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_96px)]">
         {/* Empty state — no search results */}
         {sortedItems.length === 0 && searchQuery ? (
           <div className="flex flex-col items-center justify-center py-20 px-6">
@@ -398,6 +515,10 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
                           onNavigate={(id) => navigate(`/item/${id}`)}
                           onFavorite={handleFavorite}
                           favLoading={favLoading}
+                          isSelectionMode={isSelectionMode}
+                          isSelected={selectedIds.has(item.id)}
+                          onToggleSelect={handleToggleSelect}
+                          onLongPress={handleLongPress}
                         />
                       ))}
                     </div>
@@ -420,17 +541,75 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       </div>
 
       {/* ── FAB ─────────────────────────────────────────────────────── */}
-      <button
-        onClick={() => navigate('/add')}
-        className="fixed right-5 z-20 w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 active:scale-95 transition-transform"
-        style={{ bottom: 'calc(max(env(safe-area-inset-bottom), 4px) + 64px)' }}
-        aria-label="Add new password"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
+      {!isSelectionMode && (
+        <button
+          onClick={() => navigate('/add')}
+          className="fixed right-5 z-20 w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 active:scale-95 transition-transform"
+          style={{ bottom: 'calc(max(env(safe-area-inset-bottom), 4px) + 64px)' }}
+          aria-label="Add new password"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* ── Selection Action Bar ────────────────────────────────────── */}
+      {isSelectionMode && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#16213e] border-t border-white/5 pb-[max(env(safe-area-inset-bottom),_4px)]">
+          <div className="flex items-center justify-around py-3 px-4" style={{ maxWidth: '448px', margin: '0 auto' }}>
+            <button
+              onClick={() => setShowLabelDialog(true)}
+              disabled={selectedIds.size === 0}
+              className="flex flex-col items-center gap-1 text-cyan-400 disabled:opacity-50 transition-opacity"
+            >
+              <Tag className="w-6 h-6" />
+              <span className="text-[10px] font-medium text-gray-300">Label</span>
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={selectedIds.size === 0}
+              className="flex flex-col items-center gap-1 text-red-400 disabled:opacity-50 transition-opacity"
+            >
+              <Trash2 className="w-6 h-6" />
+              <span className="text-[10px] font-medium text-gray-300">Delete</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Label Dialog ───────────────────────────────────────────── */}
+      {showLabelDialog && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#16213e] w-full max-w-sm rounded-2xl p-5 shadow-2xl border border-white/10">
+            <h3 className="text-white text-lg font-semibold mb-4">Add Label to {selectedIds.size} Items</h3>
+            <input
+              type="text"
+              value={newLabelName}
+              onChange={(e) => setNewLabelName(e.target.value)}
+              placeholder="e.g. Work, Streaming, Email..."
+              className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors mb-6"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowLabelDialog(false); setNewLabelName(''); }}
+                className="flex-1 py-2.5 rounded-xl text-gray-400 hover:bg-white/5 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkLabel}
+                disabled={!newLabelName.trim()}
+                className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-semibold disabled:opacity-50 transition-colors"
+              >
+                Apply Label
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Bottom Nav ──────────────────────────────────────────────── */}
-      <BottomNav active={activeTab} onChange={setActiveTab} />
+      {!isSelectionMode && <BottomNav active={activeTab} onChange={setActiveTab} />}
     </div>
   );
 }

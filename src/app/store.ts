@@ -60,6 +60,8 @@ export interface VaultItem {
   deletedAt?: string;
   /** Favorites system — persisted in encrypted vault */
   isFavorite?: boolean;
+  /** Array of string labels attached to this item */
+  labels?: string[];
   /**
    * TOTP secret — encrypted with a SEPARATE Argon2id key (salt: email+"totp").
    * This means vault key compromise ≠ automatic 2FA seed compromise.
