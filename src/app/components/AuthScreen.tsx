@@ -399,15 +399,20 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 // New user — needs to create a master password for encryption.
                 setMode('setup_master');
             }
-        } catch (err: unknown) {
+        } catch (err: any) {
             clearTimeout(safetyTimeout);
-            const message = err instanceof Error ? err.message : '';
-            if (message.includes('auth/popup-closed-by-user')) {
+            log.error('Google sign-in error occurred:', err);
+            console.error('Google sign-in error details:', err);
+            
+            const message = err?.message || String(err);
+            const code = err?.code || '';
+            
+            if (message.includes('auth/popup-closed-by-user') || code === 'auth/popup-closed-by-user') {
                 // User closed the popup, not an error
-            } else if (message.includes('auth/cancelled-popup-request')) {
+            } else if (message.includes('auth/cancelled-popup-request') || code === 'auth/cancelled-popup-request') {
                 // Duplicate popup, ignore
             } else {
-                setError('Google sign-in failed. Please try again.');
+                setError(`Google sign-in failed: ${code || message || 'Unknown error'}`);
             }
         }
         setGoogleLoading(false);
