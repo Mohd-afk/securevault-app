@@ -59,47 +59,46 @@ export default function App() {
       }
 
       // ─────────────────────────────────────────────────────────────────
-      // STEP 3: APK version check + OTA check (run in parallel, non-blocking).
-      // APK check determines if the native binary itself needs updating.
-      // OTA check handles silent JS/UI-only updates via Capgo.
+      // STEP 3: Render the app immediately — don't block on network checks.
+      // APK + OTA checks run silently in the background after boot.
       // ─────────────────────────────────────────────────────────────────
-      const [apkResult] = await Promise.allSettled([
-        // 3a: APK version check
-        checkApkUpdateRequired().then(result => {
-          console.log('[APK_UPDATE] Check result:', result);
-          if (result.updateRequired) {
-            setApkUpdateRequired(true);
-            if (result.downloadUrl) setApkDownloadUrl(result.downloadUrl);
-          }
-          return result;
-        }),
-        // 3b: OTA Capgo update check
-        initUpdater({ onCriticalUpdate: () => setCriticalUpdate(true) })
-          .then(() => console.log('[BOOT] OTA check complete'))
-          .catch(err => console.error('[BOOT] OTA check failed (non-fatal):', err)),
-      ]);
-
-      if (apkResult.status === 'rejected') {
-        console.error('[BOOT] APK update check failed (non-fatal):', apkResult.reason);
-      }
-
       setBootComplete(true);
-      console.log('[BOOT] Boot sequence complete');
+      _bm('BOOT_MARK_6_boot_complete');
+      console.log('[BOOT] Boot sequence complete — rendering app');
 
-      // ── Show OTA update toast if this is the first boot after a successful OTA ──
+      // ── Post-boot: show "just updated" toast if this is first launch after OTA ──
       if (Capacitor.isNativePlatform()) {
         const justUpdated = localStorage.getItem(OTA_JUST_UPDATED_KEY);
         if (justUpdated) {
           localStorage.removeItem(OTA_JUST_UPDATED_KEY);
-          // Small delay so the app renders before the toast appears
           setTimeout(() => {
             toast.success(`✅ Updated to v${justUpdated}`, {
-              description: 'New features are ready. Enjoy Keeguard!',
-              duration: 6000,
+              description: 'New features are live. Enjoy Keeguard!',
+              duration: 5000,
             });
-          }, 1200);
+          }, 1500);
         }
       }
+
+      // ── Background checks — fire-and-forget, 3s after boot ────────────
+      // These NEVER block the UI. They run after the app is already visible.
+      setTimeout(() => {
+        // APK update check
+        checkApkUpdateRequired()
+          .then(result => {
+            console.log('[APK_UPDATE] Check result:', result);
+            if (result.updateRequired) {
+              setApkUpdateRequired(true);
+              if (result.downloadUrl) setApkDownloadUrl(result.downloadUrl);
+            }
+          })
+          .catch(err => console.error('[APK_UPDATE] Check failed (non-fatal):', err));
+
+        // OTA silent background check
+        initUpdater({ onCriticalUpdate: () => setCriticalUpdate(true) })
+          .then(() => console.log('[OTA] Background check complete'))
+          .catch(err => console.error('[OTA] Background check failed (non-fatal):', err));
+      }, 3000);
     };
 
     boot();

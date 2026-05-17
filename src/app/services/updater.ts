@@ -303,57 +303,49 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
  * ensuring the app retries on next launch.
  */
 async function downloadAndApply(remote: VersionMetadata): Promise<void> {
-  log.info(`[OTA_EVENT: downloading] Downloading bundle from: ${remote.url}`);
-
-  // Show a persistent loading toast so the user knows something is happening
-  const toastId = toast.loading('⬇️ Downloading update...', {
-    description: `Keeguard v${remote.version} is being installed`,
-    duration: Infinity,
-  });
+  log.info(`[OTA_EVENT: downloading] Silent background download from: ${remote.url}`);
 
   try {
-    // Step 1: Download the zip bundle to device storage
-    // NOTE: Do NOT pass checksum — Capgo uses its own internal format.
-    // Passing a plain SHA-256 hex string causes silent checksum mismatch failures.
+    // Download the zip bundle silently — no UI shown during this
     const bundle = await CapacitorUpdater.download({
       url: remote.url,
       version: remote.version,
     });
 
-    log.info(`[OTA_EVENT: downloaded] Bundle: ${bundle.id}`);
+    log.info(`[OTA_EVENT: downloaded] Bundle ready: ${bundle.id}`);
 
-    // Step 2: Persist state as PENDING before applying.
-    // We do NOT set it as active until the next successful boot.
+    // Persist state as PENDING before staging.
+    // Not marked ACTIVE until the next successful boot confirms it.
     localStorage.setItem(PENDING_VERSION_KEY, remote.version);
     localStorage.setItem(PENDING_BUNDLE_ID_KEY, bundle.id);
-    log.info(`Version ${remote.version} (bundle: ${bundle.id}) marked as pending in localStorage`);
 
-    // Step 3: Write the "just updated" key BEFORE reloading.
-    // The new bundle will boot, read this key in App.tsx, and show the success toast.
+    // Write the "just updated" key — App.tsx reads this on next boot
+    // to show the post-update success toast.
     localStorage.setItem(OTA_JUST_UPDATED_KEY, remote.version);
 
-    // Dismiss loading toast and show brief "restarting" message
-    toast.dismiss(toastId);
-    toast.success('Update downloaded! Restarting...', { duration: 2000 });
-
-    // Small grace period so the toast is visible before reload
-    await new Promise(r => setTimeout(r, 1800));
-
-    // Step 4: Stage the bundle for next boot, then reload cleanly.
-    log.info(`[OTA_EVENT: set_called] Staging bundle ${bundle.id} via next(), then reloading...`);
+    // Stage bundle for next boot WITHOUT forcing an immediate reload.
+    // The update will apply the next time the user naturally opens the app.
     await CapacitorUpdater.next({ id: bundle.id });
-    await CapacitorUpdater.reload();
-  } catch (err) {
-    toast.dismiss(toastId);
-    toast.error('Update failed', {
-      description: 'Could not download the update. Will retry next launch.',
-      duration: 5000,
+
+    log.info(`[OTA_EVENT: staged] Bundle ${bundle.id} staged. Will apply on next app restart.`);
+
+    // Notify the user with a single non-intrusive toast from the bottom.
+    toast('🔄 New version downloaded', {
+      description: 'Please restart the app to apply the update.',
+      duration: 8000,
+      action: {
+        label: 'Later',
+        onClick: () => {},
+      },
     });
-    console.error('Failed to download or apply update bundle', err);
-    // Remove pending keys if we failed to call set()
+
+  } catch (err) {
+    console.error('[OTA] Silent download failed:', err);
+    // Clean up — don't leave stale pending state
     localStorage.removeItem(PENDING_VERSION_KEY);
     localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
     localStorage.removeItem(OTA_JUST_UPDATED_KEY);
+    // Fail silently — user is unaware, will retry next launch
     throw err;
   }
 }
