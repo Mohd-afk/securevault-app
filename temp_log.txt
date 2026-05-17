@@ -1,8 +1,0 @@
-﻿commit 89a8ef7afaf4977b6735d5023a77d9a5331b1d07
-Author: sekure <mohdjamal1110@gmail.com>
-Date:   Thu Apr 2 22:57:48 2026 +0530
-
-    chore: release v3.1.0 ΓÇö production stability fixes
-
- android/app/build.gradle | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)

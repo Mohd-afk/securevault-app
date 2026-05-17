@@ -19,9 +19,11 @@ import {
     linkWithCredential,
     GoogleAuthProvider,
     signInWithCredential,
+    signInWithPopup,
     type User,
 } from 'firebase/auth';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import { Capacitor } from '@capacitor/core';
 import { getFirebaseAuth } from './firebase';
 import { createLogger } from './utils/logger';
 
@@ -115,23 +117,34 @@ export async function signInWithDerivedKey(
 // ── Google Sign-In ───────────────────────────────────────────────────
 
 export async function signInWithGoogle(): Promise<User> {
-    log.info('Starting Native Google sign-in');
+    log.info('Starting Google sign-in');
     
-    // Call the native Google Sign-In plugin
-    const result = await FirebaseAuthentication.signInWithGoogle();
-    
-    // Convert the native Google credential to a Firebase credential
-    // The plugin returns idToken (Google token)
-    if (!result.credential || !result.credential.idToken) {
-        throw new Error("Google Sign-In failed to return an ID token");
+    if (Capacitor.isNativePlatform()) {
+        log.info('Using Native Google sign-in');
+        // Call the native Google Sign-In plugin
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        
+        // Convert the native Google credential to a Firebase credential
+        // The plugin returns idToken (Google token)
+        if (!result.credential || !result.credential.idToken) {
+            throw new Error("Google Sign-In failed to return an ID token");
+        }
+        
+        // Link to our JS SDK
+        const credential = GoogleAuthProvider.credential(result.credential.idToken);
+        const authResult = await signInWithCredential(getFirebaseAuth(), credential);
+        
+        log.info('Google sign-in successful (Native)', { uid: authResult.user.uid, email: authResult.user.email });
+        return authResult.user;
+    } else {
+        log.info('Using Web Google sign-in');
+        // Web fallback using standard Firebase JS SDK
+        const provider = new GoogleAuthProvider();
+        const authResult = await signInWithPopup(getFirebaseAuth(), provider);
+        
+        log.info('Google sign-in successful (Web)', { uid: authResult.user.uid, email: authResult.user.email });
+        return authResult.user;
     }
-    
-    // Link to our JS SDK
-    const credential = GoogleAuthProvider.credential(result.credential.idToken);
-    const authResult = await signInWithCredential(getFirebaseAuth(), credential);
-    
-    log.info('Google sign-in successful', { uid: authResult.user.uid, email: authResult.user.email });
-    return authResult.user;
 }
 
 // ── Sign Out ─────────────────────────────────────────────────────────
