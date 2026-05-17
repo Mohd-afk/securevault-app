@@ -23,6 +23,12 @@ export function AddEditForm() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  // Smart Categorization State
+  const [suggestedTag, setSuggestedTag] = useState<string | null>(null);
+  const [hasAutoCategorized, setHasAutoCategorized] = useState(false);
+  const [labels, setLabels] = useState<string[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -48,9 +54,39 @@ export function AddEditForm() {
           // Migration path: show deprecated plaintext field
           setTotpSecret(item.totpSecret);
         }
+        if (item.labels) {
+          setLabels(item.labels);
+        }
       }
     }
   }, [id]);
+
+  // Smart Suggestion Engine
+  useEffect(() => {
+    if (isEdit || hasAutoCategorized || !url.trim()) return;
+
+    const lowerUrl = url.toLowerCase();
+    let match = null;
+
+    if (lowerUrl.includes('gmail.com') || lowerUrl.includes('outlook.com') || lowerUrl.includes('yahoo.com')) {
+      match = 'Email';
+    } else if (lowerUrl.includes('bank') || lowerUrl.includes('hdfc') || lowerUrl.includes('chase') || lowerUrl.includes('capitalone')) {
+      match = 'Banking';
+    } else if (lowerUrl.includes('steam') || lowerUrl.includes('epicgames') || lowerUrl.includes('xbox') || lowerUrl.includes('playstation')) {
+      match = 'Gaming';
+    } else if (lowerUrl.includes('github.com') || lowerUrl.includes('aws.amazon.com') || lowerUrl.includes('vercel.com')) {
+      match = 'Developer';
+    } else if (lowerUrl.includes('.edu')) {
+      match = 'Education';
+    } else if (lowerUrl.includes('amazon') || lowerUrl.includes('flipkart') || lowerUrl.includes('ebay')) {
+      match = 'Shopping';
+    }
+
+    if (match && !labels.includes(match)) {
+      setSuggestedTag(match);
+      setHasAutoCategorized(true);
+    }
+  }, [url, isEdit, hasAutoCategorized, labels]);
 
   const canSave = title.trim() && password.trim();
 
@@ -64,6 +100,11 @@ export function AddEditForm() {
         ? await encryptTotpSecret(totpSecret.trim())
         : undefined;
 
+      const finalLabels = [...labels];
+      if (suggestedTag && !finalLabels.includes(suggestedTag)) {
+        finalLabels.push(suggestedTag);
+      }
+
       const itemPayload = {
         title: title.trim(),
         username: username.trim(),
@@ -72,6 +113,7 @@ export function AddEditForm() {
         url: url.trim(),
         note: note.trim(),
         isFavorite,
+        labels: finalLabels.length > 0 ? finalLabels : undefined,
         totpSecretEncrypted,
         totpSecret: undefined, // Never store raw TOTP in vault blob
       };
@@ -205,35 +247,65 @@ export function AddEditForm() {
           </div>
         )}
 
-        {/* Note */}
-        <div>
-          <label className="text-gray-400 text-xs mb-1.5 block">Note</label>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Add any additional notes..."
-            rows={3}
-            className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors resize-none"
-          />
+        {/* Smart Suggestion Chip */}
+        {suggestedTag && (
+          <div className="flex items-center gap-2 bg-cyan-900/20 border border-cyan-500/30 rounded-lg px-3 py-2 animate-in fade-in slide-in-from-top-1">
+            <span className="text-cyan-400 text-sm">✨ Categorized as <strong>{suggestedTag}</strong></span>
+            <button
+              onClick={() => setSuggestedTag(null)}
+              className="ml-auto text-xs text-gray-400 hover:text-white transition-colors px-2 py-1 rounded bg-white/5"
+            >
+              Undo
+            </button>
+          </div>
+        )}
+
+        {/* Advanced Options Toggle */}
+        <div className="pt-2 border-t border-gray-700/30">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="flex items-center gap-2 text-cyan-400 text-sm font-medium hover:text-cyan-300 transition-colors py-2"
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+            {showAdvanced ? 'Hide Advanced Options' : 'Show Advanced Options'}
+          </button>
         </div>
 
-        {/* TOTP Secret (optional — for 2FA tracking) */}
-        <div>
-          <label className="text-gray-400 text-xs mb-1.5 block">
-            TOTP Secret{' '}
-            <span className="text-gray-600 font-normal">(optional — for 2FA tracking)</span>
-          </label>
-          <input
-            type="text"
-            value={totpSecret}
-            onChange={(e) => setTotpSecret(e.target.value)}
-            placeholder="JBSWY3DPEHPK3PXP"
-            className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white font-mono placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
-          />
-          <p className="text-gray-600 text-xs mt-1.5">
-            Store your 2FA secret key so the Security Dashboard can track which accounts have 2FA enabled.
-          </p>
-        </div>
+        {/* Advanced Options Content */}
+        {showAdvanced && (
+          <div className="space-y-5 animate-in slide-in-from-top-2 fade-in duration-200">
+            {/* Note */}
+            <div>
+              <label className="text-gray-400 text-xs mb-1.5 block">Note</label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Add any additional notes..."
+                rows={3}
+                className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors resize-none"
+              />
+            </div>
+
+            {/* TOTP Secret */}
+            <div>
+              <label className="text-gray-400 text-xs mb-1.5 block">
+                TOTP Secret{' '}
+                <span className="text-gray-600 font-normal">(for 2FA tracking)</span>
+              </label>
+              <input
+                type="text"
+                value={totpSecret}
+                onChange={(e) => setTotpSecret(e.target.value)}
+                placeholder="JBSWY3DPEHPK3PXP"
+                className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white font-mono placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
+              />
+              <p className="text-gray-600 text-xs mt-1.5">
+                Store your 2FA secret key so the Security Dashboard can track which accounts have 2FA enabled.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error display */}

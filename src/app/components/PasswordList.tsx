@@ -39,15 +39,16 @@ import { SortModal } from './SortModal';
 import type { User } from 'firebase/auth';
 
 // ── Category chip definition ───────────────────────────────────────────
-type CategoryChip = 'all' | 'favorites' | 'codes' | 'passkeys' | 'cards' | 'notes';
+type CategoryChip = 'all' | 'favorites' | 'banking' | 'email' | 'gaming' | 'cards' | 'ids';
 
 const CHIPS: { id: CategoryChip; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'favorites', label: '★ Favorites' },
-  { id: 'codes', label: 'Codes' },
-  { id: 'passkeys', label: 'Passkeys' },
+  { id: 'banking', label: 'Banking' },
+  { id: 'email', label: 'Email' },
+  { id: 'gaming', label: 'Gaming' },
   { id: 'cards', label: 'Cards' },
-  { id: 'notes', label: 'Notes' },
+  { id: 'ids', label: 'IDs' },
 ];
 
 // ── Type icon/color maps ──────────────────────────────────────────────
@@ -216,14 +217,16 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
     switch (activeChip) {
       case 'favorites':
         return sidebarFiltered.filter((i) => i.isFavorite);
-      case 'codes':
-        return sidebarFiltered.filter((i) => !!i.totpSecretEncrypted || !!i.totpSecret);
-      case 'passkeys':
-        return []; // No passkey type in current model
+      case 'banking':
+        return sidebarFiltered.filter((i) => i.labels?.includes('Banking'));
+      case 'email':
+        return sidebarFiltered.filter((i) => i.labels?.includes('Email'));
+      case 'gaming':
+        return sidebarFiltered.filter((i) => i.labels?.includes('Gaming'));
       case 'cards':
         return sidebarFiltered.filter((i) => i.type === 'Card');
-      case 'notes':
-        return sidebarFiltered.filter((i) => !!i.note && !i.password);
+      case 'ids':
+        return sidebarFiltered.filter((i) => i.type === 'Other' && i.title.toLowerCase().includes('id'));
       default:
         return sidebarFiltered;
     }
