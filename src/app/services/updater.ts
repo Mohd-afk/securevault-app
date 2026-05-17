@@ -191,6 +191,18 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
         log.warn(`[OTA_EVENT: rollback_detected] Version ${pendingVersion || 'unknown'} failed to boot native bundle. Recorded as failed.`);
         localStorage.removeItem(PENDING_VERSION_KEY);
         localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
+      } else {
+        // ── POISON CLEAR ─────────────────────────────────────────────────
+        // We are on builtin with no pending download — a clean boot.
+        // Clear ACTIVE_VERSION_KEY so the next update check sees 0.0.0
+        // and always attempts a fresh download. Also wipe the failed list
+        // because previous failures were tied to a different bundle slot.
+        const activeV = localStorage.getItem(ACTIVE_VERSION_KEY);
+        if (activeV) {
+          log.warn(`[OTA POISON CLEAR] On builtin with no pending. Clearing ACTIVE_VERSION_KEY=${activeV} and FAILED_VERSIONS_KEY to unblock updates.`);
+          localStorage.removeItem(ACTIVE_VERSION_KEY);
+          localStorage.removeItem(FAILED_VERSIONS_KEY);
+        }
       }
     } else if (!bundleIdMatch) {
       log.warn(`Bundle mismatch. Expected ${pendingBundleId}, got ${currentBundleId}. Not promoting pending version.`);
@@ -301,10 +313,11 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
 
   try {
     // Step 1: Download the zip bundle to device storage
+    // NOTE: Do NOT pass checksum — Capgo uses its own internal format.
+    // Passing a plain SHA-256 hex string causes silent checksum mismatch failures.
     const bundle = await CapacitorUpdater.download({
       url: remote.url,
       version: remote.version,
-      ...(remote.checksum ? { checksum: remote.checksum } : {}),
     });
 
     log.info(`[OTA_EVENT: downloaded] Bundle: ${bundle.id}`);
