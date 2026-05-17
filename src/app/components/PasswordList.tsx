@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import {
   addVaultChangeListener,
+  getVaultItems,
   toggleFavorite,
   updateVaultItem,
   deleteVaultItem,
