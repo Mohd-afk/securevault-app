@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { router } from './routes';
 import { initFirebase } from './firebase';
-import { initUpdater } from './services/updater';
+import { initUpdater, OTA_JUST_UPDATED_KEY } from './services/updater';
 import { checkApkUpdateRequired } from './services/apk-update-checker';
 import CriticalUpdateScreen from './components/CriticalUpdateScreen';
 import ApkUpdateBanner from './components/ApkUpdateBanner';
@@ -85,6 +85,21 @@ export default function App() {
 
       setBootComplete(true);
       console.log('[BOOT] Boot sequence complete');
+
+      // ── Show OTA update toast if this is the first boot after a successful OTA ──
+      if (Capacitor.isNativePlatform()) {
+        const justUpdated = localStorage.getItem(OTA_JUST_UPDATED_KEY);
+        if (justUpdated) {
+          localStorage.removeItem(OTA_JUST_UPDATED_KEY);
+          // Small delay so the app renders before the toast appears
+          setTimeout(() => {
+            toast.success(`✅ Updated to v${justUpdated}`, {
+              description: 'New features are ready. Enjoy Keeguard!',
+              duration: 6000,
+            });
+          }, 1200);
+        }
+      }
     };
 
     boot();
@@ -156,12 +171,13 @@ export default function App() {
           <RouterProvider router={router} />
           <Toaster
             theme="dark"
-            position="top-center"
+            position="bottom-center"
             toastOptions={{
               style: {
                 background: '#16213e',
-                border: '1px solid rgba(255,255,255,0.05)',
+                border: '1px solid rgba(6,182,212,0.25)',
                 color: '#fff',
+                marginBottom: 'env(safe-area-inset-bottom)',
               },
             }}
           />

@@ -14,6 +14,7 @@ import { getFirebaseDb } from '../firebase';
 import { createLogger } from '../utils/logger';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import { toast } from 'sonner';
 
 const log = createLogger('OTA');
 
@@ -24,6 +25,8 @@ const PENDING_VERSION_KEY = 'sv_ota_pending_version';
 const PENDING_BUNDLE_ID_KEY = 'sv_ota_pending_bundle_id';
 const ACTIVE_VERSION_KEY = 'sv_ota_active_version';
 const FAILED_VERSIONS_KEY = 'sv_ota_failed_versions';
+/** Written before reload() — read by App.tsx on next boot to show the success toast */
+export const OTA_JUST_UPDATED_KEY = 'sv_ota_just_updated';
 /**
  * Tracks the native binary version (from App.getInfo()) that was running
  * when OTA state was last written. If the native version changes (i.e. the
@@ -290,6 +293,12 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
 async function downloadAndApply(remote: VersionMetadata): Promise<void> {
   log.info(`[OTA_EVENT: downloading] Downloading bundle from: ${remote.url}`);
 
+  // Show a persistent loading toast so the user knows something is happening
+  const toastId = toast.loading('⬇️ Downloading update...', {
+    description: `Keeguard v${remote.version} is being installed`,
+    duration: Infinity,
+  });
+
   try {
     // Step 1: Download the zip bundle to device storage
     const bundle = await CapacitorUpdater.download({
@@ -306,24 +315,32 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
     localStorage.setItem(PENDING_BUNDLE_ID_KEY, bundle.id);
     log.info(`Version ${remote.version} (bundle: ${bundle.id}) marked as pending in localStorage`);
 
-    // Step 3: Stage the bundle for next boot, then reload cleanly.
-    //
-    // WHY next() + reload() instead of set():
-    // - set() reloads in-place inside the current WebView context.
-    //   Capgo expects a NEW notifyAppReady() call from the OTA bundle,
-    //   but our builtin App.tsx already called it. Capgo never gets the
-    //   OTA-bundle-specific notifyAppReady(), hits appReadyTimeout, and rolls back.
-    // - next() stages the bundle for the next cold boot WITHOUT reloading now.
-    //   reload() then triggers a clean restart where Capgo starts a fresh
-    //   notifyAppReady() timer BEFORE our App.tsx fires — so attribution is correct.
+    // Step 3: Write the "just updated" key BEFORE reloading.
+    // The new bundle will boot, read this key in App.tsx, and show the success toast.
+    localStorage.setItem(OTA_JUST_UPDATED_KEY, remote.version);
+
+    // Dismiss loading toast and show brief "restarting" message
+    toast.dismiss(toastId);
+    toast.success('Update downloaded! Restarting...', { duration: 2000 });
+
+    // Small grace period so the toast is visible before reload
+    await new Promise(r => setTimeout(r, 1800));
+
+    // Step 4: Stage the bundle for next boot, then reload cleanly.
     log.info(`[OTA_EVENT: set_called] Staging bundle ${bundle.id} via next(), then reloading...`);
     await CapacitorUpdater.next({ id: bundle.id });
     await CapacitorUpdater.reload();
   } catch (err) {
+    toast.dismiss(toastId);
+    toast.error('Update failed', {
+      description: 'Could not download the update. Will retry next launch.',
+      duration: 5000,
+    });
     console.error('Failed to download or apply update bundle', err);
     // Remove pending keys if we failed to call set()
     localStorage.removeItem(PENDING_VERSION_KEY);
     localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
+    localStorage.removeItem(OTA_JUST_UPDATED_KEY);
     throw err;
   }
 }
