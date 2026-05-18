@@ -155,19 +155,29 @@ export async function signOut(): Promise<void> {
     log.info('Sign-out complete');
 }
 
-// ── Auth State Observer ──────────────────────────────────────────────
-
 export function onAuthChange(
     callback: (user: User | null) => void,
 ): () => void {
-    return onAuthStateChanged(getFirebaseAuth(), (user) => {
-        log.info('Auth state changed', { uid: user?.uid ?? null, email: user?.email ?? null });
-        callback(user);
-    });
+    try {
+        const auth = getFirebaseAuth();
+        return onAuthStateChanged(auth, (user) => {
+            log.info('Auth state changed', { uid: user?.uid ?? null, email: user?.email ?? null });
+            callback(user);
+        });
+    } catch (e) {
+        log.warn('onAuthChange: Firebase auth not initialized, returning dummy unsubscriber.', e);
+        // Fire callback with null asynchronously to trigger offline UI flow
+        setTimeout(() => callback(null), 0);
+        return () => {};
+    }
 }
 
 // ── Current User ─────────────────────────────────────────────────────
 
 export function getCurrentUser(): User | null {
-    return getFirebaseAuth().currentUser;
+    try {
+        return getFirebaseAuth().currentUser;
+    } catch {
+        return null;
+    }
 }

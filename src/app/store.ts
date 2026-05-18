@@ -16,6 +16,8 @@ import {
   saveSettingsToCloud,
   loadSettingsFromCloud,
   deleteCloudVault,
+  saveCategoriesToCloud,
+  loadCategoriesFromCloud,
 } from './firestore';
 import { idbGet, idbSet, idbDelete } from './idb';
 import { createLogger } from './utils/logger';
@@ -73,6 +75,17 @@ export interface VaultItem {
    * Will be removed after one release cycle.
    */
   totpSecret?: string;
+  /** Optional custom category link */
+  categoryId?: string;
+}
+
+export interface CustomCategory {
+  id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+  order?: number;
+  isArchived?: boolean;
 }
 
 export interface AppSettings {
@@ -120,6 +133,8 @@ export function clearSession(): void {
     _unsubscribeVault = null;
   }
   _vaultChangeListeners = [];
+  _cachedCustomCategories = null;
+  _customCategoryChangeListeners = [];
 }
 
 /**
@@ -134,6 +149,7 @@ export function clearSession(): void {
 export async function clearLocalVaultData(): Promise<void> {
   log.info('Clearing local vault data from IndexedDB (settings preserved)');
   await idbDelete(VAULT_KEY);
+  await idbDelete(CUSTOM_CATEGORIES_KEY);
 }
 
 export function getSessionPassword(): string | null {
@@ -356,13 +372,9 @@ async function saveVaultToStorage(items: VaultItem[], password: string): Promise
 
 async function saveVaultEverywhere(items: VaultItem[], password?: string | null): Promise<void> {
   const email = getUserEmail();
-  if (!email) {
-    log.warn('saveVaultEverywhere: no email — skipping');
-    return;
-  }
 
   let key = _sessionCryptoKey;
-  if (!key && password) {
+  if (!key && password && email) {
     key = await deriveEncryptionKey(password, email);
   }
 
@@ -384,7 +396,7 @@ async function saveVaultEverywhere(items: VaultItem[], password?: string | null)
   await syncToNativeVault(items);
 
   // 3. Save to cloud
-  if (uid) {
+  if (uid && email) {
     // Mark write timestamp to suppress echo-back from realtime sync
     _lastWriteTimestamp = Date.now();
     log.debug('Setting sync suppression timestamp', { _lastWriteTimestamp });
@@ -395,6 +407,9 @@ async function saveVaultEverywhere(items: VaultItem[], password?: string | null)
       log.error('Failed to save vault to cloud', e);
     }
   }
+
+  // 4. Notify UI change listeners immediately for synchronous UI responsiveness
+  notifyVaultChangeListeners();
 }
 
 // ── Public vault API ─────────────────────────────────────────────────
@@ -485,6 +500,11 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
     }
   }).catch((e) => {
     log.warn('TOTP migration failed (non-fatal, will retry next unlock)', e);
+  });
+
+  // Load custom categories after successful unlock
+  loadCustomCategories().catch((e) => {
+    log.error('Failed to load custom categories on unlock:', e);
   });
 
   return _cachedItems || items;
@@ -1145,7 +1165,10 @@ export async function unlockWithBiometric(): Promise<boolean> {
         lastBiometricUnlock: new Date().toISOString()
     });
     
-    log.info('Vault unlocked via biometrics', { itemCount: items.length });
+    // Load custom categories after successful biometric unlock
+    loadCustomCategories().catch((e) => {
+      log.error('Failed to load custom categories on biometric unlock:', e);
+    });
     
     const uid = getUid();
     if (uid) {
@@ -1181,4 +1204,167 @@ export async function isAutofillEnabled(): Promise<boolean> {
     log.warn('Failed to check autofill status', e);
     return false;
   }
+}
+
+// ── Custom Categories System ──────────────────────────────────────────
+
+const CUSTOM_CATEGORIES_KEY = 'securevault_custom_categories';
+let _cachedCustomCategories: CustomCategory[] | null = null;
+let _customCategoryChangeListeners: Array<(categories: CustomCategory[]) => void> = [];
+
+function notifyCustomCategoryListeners() {
+  const categories = _cachedCustomCategories || [];
+  _customCategoryChangeListeners.forEach((listener) => {
+    try {
+      listener(categories);
+    } catch (e) {
+      log.error('Error in custom category listener:', e);
+    }
+  });
+}
+
+export function subscribeToCustomCategories(callback: (categories: CustomCategory[]) => void): () => void {
+  _customCategoryChangeListeners.push(callback);
+  
+  // Proactively fire loadCustomCategories in the background if not cached yet
+  if (_cachedCustomCategories === null) {
+    loadCustomCategories().catch((e) => {
+      log.error('Proactive custom category load failed:', e);
+    });
+  }
+
+  // Emit initial state immediately
+  callback(_cachedCustomCategories || []);
+  return () => {
+    _customCategoryChangeListeners = _customCategoryChangeListeners.filter((l) => l !== callback);
+  };
+}
+
+export async function loadCustomCategories(): Promise<CustomCategory[]> {
+  const uid = getUid();
+  let categories: CustomCategory[] = [];
+
+  // 1. Try to load from IndexedDB
+  try {
+    const local = await idbGet<CustomCategory[]>(CUSTOM_CATEGORIES_KEY);
+    if (local && Array.isArray(local)) {
+      categories = local;
+    }
+  } catch (e) {
+    log.warn('Failed to load custom categories from IndexedDB:', e);
+  }
+
+  // 2. Try to load from cloud if available
+  if (uid) {
+    try {
+      const cloud = await loadCategoriesFromCloud(uid);
+      if (cloud && Array.isArray(cloud) && cloud.length > 0) {
+        // Simple merge: cloud takes precedence
+        categories = cloud;
+        await idbSet(CUSTOM_CATEGORIES_KEY, categories);
+      }
+    } catch (e) {
+      log.warn('Failed to load custom categories from cloud:', e);
+    }
+  }
+
+  // Sort by order
+  categories.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  _cachedCustomCategories = categories;
+  notifyCustomCategoryListeners();
+  return categories;
+}
+
+export async function saveCustomCategories(categories: CustomCategory[]): Promise<void> {
+  // Sort and cache
+  categories.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  _cachedCustomCategories = categories;
+
+  // 1. Save locally to IndexedDB
+  try {
+    await idbSet(CUSTOM_CATEGORIES_KEY, categories);
+  } catch (e) {
+    log.error('Failed to save custom categories to IndexedDB:', e);
+  }
+
+  // 2. Sync to cloud if authenticated
+  const uid = getUid();
+  if (uid) {
+    try {
+      await saveCategoriesToCloud(uid, categories);
+    } catch (e) {
+      log.error('Failed to sync custom categories to cloud:', e);
+    }
+  }
+
+  notifyCustomCategoryListeners();
+}
+
+export async function addCustomCategory(category: Omit<CustomCategory, 'id'>): Promise<CustomCategory> {
+  const categories = _cachedCustomCategories ? [..._cachedCustomCategories] : await loadCustomCategories();
+  const newCat: CustomCategory = {
+    ...category,
+    id: 'cat_' + Math.random().toString(36).substring(2, 11),
+    order: category.order ?? categories.length,
+  };
+  categories.push(newCat);
+  await saveCustomCategories(categories);
+  return newCat;
+}
+
+export async function updateCustomCategory(id: string, updates: Partial<Omit<CustomCategory, 'id'>>): Promise<void> {
+  const categories = _cachedCustomCategories ? [..._cachedCustomCategories] : await loadCustomCategories();
+  const idx = categories.findIndex((c) => c.id === id);
+  if (idx !== -1) {
+    categories[idx] = { ...categories[idx], ...updates };
+    await saveCustomCategories(categories);
+  }
+}
+
+export async function deleteCustomCategory(id: string): Promise<void> {
+  let categories = _cachedCustomCategories ? [..._cachedCustomCategories] : await loadCustomCategories();
+  categories = categories.filter((c) => c.id !== id);
+  
+  // Re-adjust order indices
+  categories.forEach((c, idx) => {
+    c.order = idx;
+  });
+
+  await saveCustomCategories(categories);
+
+  // Also clean up references in items!
+  const items = [...(_cachedItems || [])];
+  let modified = false;
+  items.forEach((item) => {
+    if (item.categoryId === id) {
+      delete item.categoryId;
+      modified = true;
+    }
+  });
+
+  if (modified) {
+    _cachedItems = items;
+    await saveVaultEverywhere(items);
+  }
+}
+
+export async function reorderCustomCategories(orderedIds: string[]): Promise<void> {
+  const categories = _cachedCustomCategories ? [..._cachedCustomCategories] : await loadCustomCategories();
+  const reordered: CustomCategory[] = [];
+  
+  orderedIds.forEach((id, idx) => {
+    const cat = categories.find((c) => c.id === id);
+    if (cat) {
+      reordered.push({ ...cat, order: idx });
+    }
+  });
+
+  // Keep any category not in the ordered list at the end
+  categories.forEach((cat) => {
+    if (!orderedIds.includes(cat.id)) {
+      reordered.push({ ...cat, order: reordered.length });
+    }
+  });
+
+  await saveCustomCategories(reordered);
 }

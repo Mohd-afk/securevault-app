@@ -2,8 +2,8 @@
 
 > **Branding alias:** This app was previously called **SecureVault** and is now called **Keeguard**. `Keeguard` = `SecureVault` — they are the **same app**, just old vs. new name. Internal identifiers (package `com.mohdj.securevault`, storage keys `securevault_*`) keep the old name intentionally to protect existing user data.
 
-> **Last Updated:** 2026-03-25  
-> **Current Version:** 1.0.4  
+> **Last Updated:** 2026-05-18  
+> **Current Version:** 4.0.0  
 > **Repository:** Mohd-afk/securevault-app  
 > **Stack:** React 18 · Vite · Capacitor (Android) · Firebase (Auth, Firestore) · Kotlin (Native)
 
@@ -293,6 +293,78 @@ Collapsible sections:
 
 ---
 
+### 1.20 Favorites (★) System
+
+**Description:** Allows users to mark individual password entries as favorites for quick access.
+- **One-Line Description & Rationale:** This feature allows users to star items for immediate filtering in the main view, chosen to streamline access to frequently-used credentials without searching.
+- **Introduced:** `feat(store): extend VaultItem with isFavorite and totpSecret` (2026-05-18)
+- **Key Files:** `src/app/store.ts` (`toggleFavorite`), `src/app/components/PasswordList.tsx`, `src/app/components/AddEditForm.tsx`, `src/app/components/ItemDetail.tsx`
+
+---
+
+### 1.21 Category Chips Filter
+
+**Description:** Horizontal scrollable category chips (`All`, `Codes`, `Passkeys`, `Cards`, `Notes`) at the top of the vault.
+- **One-Line Description & Rationale:** Provides quick filtering of credentials by their category/type directly from the home header, chosen to let users filter their vault list with a single tap instead of navigating sub-menus.
+- **Introduced:** `feat(home): complete home screen redesign with all filters` (2026-05-18)
+- **Key Files:** `src/app/components/PasswordList.tsx`
+
+---
+
+### 1.22 Sidebar Navigation Drawer
+
+**Description:** An animated, slide-out drawer providing centralized navigation and category item counts.
+- **One-Line Description & Rationale:** A collapsible side drawer displaying category lists and settings shortcuts with a dynamic slide animation, chosen to maximize screen real estate on mobile devices while keeping full-app navigation unified and fluid.
+- **Introduced:** `feat(ui): sidebar navigation drawer` (2026-05-18)
+- **Key Files:** `src/app/components/Sidebar.tsx`, `src/app/components/PasswordList.tsx`
+
+---
+
+### 1.23 Smart Fuzzy Search
+
+**Description:** Multi-field tokenized search that matches partial, out-of-order terms across title, URL, and username.
+- **One-Line Description & Rationale:** An advanced search hook that splits queries into tokens and searches multiple fields simultaneously, chosen so users can instantly find accounts using partial keywords in any order (e.g., "goo acc 123" matching a Google account containing "123").
+- **Introduced:** `feat(search): fuzzy multi-field smart search` (2026-05-18)
+- **Key Files:** `src/app/hooks/useSmartSearch.ts`, `src/app/components/PasswordList.tsx`
+
+---
+
+### 1.24 Multi-Criteria Sorting System
+
+**Description:** Sorting system allowing users to order vault items by title, creation date, modification date, or item size via a bottom-sheet modal.
+- **One-Line Description & Rationale:** A dedicated custom sorting hook coupled with a bottom-sheet radio button selection modal, chosen to let users customize their vault sorting dynamically according to their organizational needs.
+- **Introduced:** `feat(sort): sortable vault list hook` (2026-05-18)
+- **Key Files:** `src/app/hooks/useSort.ts`, `src/app/components/SortModal.tsx`, `src/app/components/PasswordList.tsx`
+
+---
+
+### 1.25 Cryptographically-Secure Password Generator
+
+**Description:** A custom password generator leveraging hardware-backed entropy with strength visualizers and advanced configuration.
+- **One-Line Description & Rationale:** A strong random password generator that guarantees character inclusion from selected sets using cryptographically secure random values and color-coded symbols, chosen to replace unsecure pseudo-random generators and eliminate similar characters (like 1, l, I, 0, o, O) that confuse users.
+- **Introduced:** `feat(generator): cryptographically-secure password generator` (2026-05-18)
+- **Key Files:** `src/app/components/PasswordGenerator.tsx`
+
+---
+
+### 1.26 Security Health Dashboard
+
+**Description:** A dashboard providing automated credential auditing for weak, reused, or compromised passwords.
+- **One-Line Description & Rationale:** A localized diagnostic panel checking password strength, reuse, and breach history via HIBP range queries, chosen to give users a privacy-first, offline-capable way to monitor and fix password vulnerabilities.
+- **Introduced:** `feat(security): full security health dashboard with HIBP k-Anonymity` (2026-05-18)
+- **Key Files:** `src/app/components/SecurityDashboard.tsx`, `src/app/services/hibpCache.ts`
+
+---
+
+### 1.27 TOTP 2FA Verification Secrets
+
+**Description:** Integration of TOTP configuration secrets within vault entries to enable built-in two-factor code generation.
+- **One-Line Description & Rationale:** Dedicated secret storage and input fields added to the vault item model and detail UI, chosen to consolidate passwords and two-factor authenticator codes into a single secure application flow.
+- **Introduced:** `feat(store): extend VaultItem with isFavorite and totpSecret` (2026-05-18)
+- **Key Files:** `src/app/store.ts` (`VaultItem`), `src/app/components/AddEditForm.tsx`, `src/app/components/ItemDetail.tsx`
+
+---
+
 ## 2. Developer / System Features
 
 ### 2.1 Structured Logging System
@@ -475,6 +547,42 @@ Collapsible sections:
 
 ---
 
+### 2.14 TOTP Secret Cryptographic Isolation
+
+**Description:** Complete separation of 2FA secrets from the main password encryption context in the vault database.
+- **One-Line Description & Rationale:** Encrypts high-value TOTP secrets with a distinct Argon2id-derived subkey rather than storing them in the same context as standard passwords, chosen to ensure that a targeted password compromise does not automatically leak the associated 2FA token.
+- **Introduced:** `feat(store): extend VaultItem with isFavorite and totpSecret` (2026-05-18)
+- **Key Files:** `src/app/store.ts`, `src/app/crypto.ts`
+
+---
+
+### 2.15 Production-Grade HIBP Breach Checker Service
+
+**Description:** A background checker utilizing k-Anonymity range checks with locally cached IndexedDB results and API rate limit safeguards.
+- **One-Line Description & Rationale:** Performs SHA-1 prefix lookups with a 24-hour TTL client-side cache and 350ms rate limit buffers, chosen to guarantee rapid, privacy-preserving breach auditing that gracefully survives offline states without blocking API limits.
+- **Introduced:** `feat(security): full security health dashboard with HIBP k-Anonymity` (2026-05-18)
+- **Key Files:** `src/app/services/hibpCache.ts`, `src/app/components/SecurityDashboard.tsx`
+
+---
+
+### 2.16 OTA Checksum Integrity Verification
+
+**Description:** Cryptographic checksum verification of over-the-air bundles prior to extraction and application.
+- **One-Line Description & Rationale:** Performs SHA-256 hash checks on downloaded OTA zip archives against Firestore-announced hashes before triggering native bundle updates, chosen to eliminate the risk of corrupted downloads or malicious supply-chain injection attacks.
+- **Introduced:** `feat(nav): add Security and Generator routes + bottom tab bar` (2026-05-18)
+- **Key Files:** `src/app/services/updater.ts`
+
+---
+
+### 2.17 Strict Memory Hygiene System
+
+**Description:** Automated clear-on-inactivity routines that purge sensitive cryptographic keys and plain-text cache from memory.
+- **One-Line Description & Rationale:** Triggers deep scrub operations on the main store variables whenever the app is backgrounded, locked, or exceeds inactivity timeouts, chosen to minimize the persistence of sensitive cryptographic materials in RAM and mitigate advanced physical or root dump exploits.
+- **Introduced:** `feat(store): extend VaultItem with isFavorite and totpSecret` (2026-05-18)
+- **Key Files:** `src/app/store.ts` (`clearInMemoryKeys`), `src/app/secureMemory.ts`
+
+---
+
 ## 3. Technical & Architectural Evolution
 
 ### 3.1 Key Derivation: PBKDF2 → Argon2id
@@ -576,6 +684,7 @@ Collapsible sections:
 | 2026-03-15 | `f9970ec6` | Google sign-in fix, CSV updates |
 | 2026-03-16 | `111f3e36` | Security fixes, user existence checks |
 | 2026-03-16 | `5ef446b0` | **Android Biometric Unlock Integration** |
+| 2026-05-18 | `v4.0.0` | **Keeguard v4.0.0 Release** — Major UX & Security Overhaul (Favorites, Smart Search, Sorting, Sidebar, HIBP Checker, Cryptographic TOTP Isolation, Checksum Integrity, and Memory Hygiene) |
 
 ---
 
@@ -735,3 +844,28 @@ Resolved a critical issue where the application continued to display a mandatory
 - **Root Cause**: `CapacitorUpdater` transparently hooks into Capacitor's standard `App.getInfo()` API. When an OTA bundle is active (e.g. bundle 0.0.9), `App.getInfo().version` returns the *bundle* version (0.0.9), not the true underlying native APK version. The native version check was comparing this overwritten version against the `min_apk_version` stored in Firestore (which expected "3.1.0"), resulting in false-positive "Upgrade Required" triggers.
 - **Fix**: Replaced all usages of `App.getInfo().version` for system upgrade checks with `CapacitorUpdater.current().native`. This bypasses the OTA override and fetches the unadulterated native APK version to correctly evaluate min-app requirements and the OTA migration guard.
 - **Key Files**: `src/app/services/apk-update-checker.ts`, `src/app/services/updater.ts`
+
+---
+
+## Production Release v4.0.0 — UX & Security Overhaul (2026-05-18)
+
+### Overview
+This major release (versionName 4.0.0) transforms Keeguard with high-fidelity UI components, powerful search and organization tools, and advanced security hardening measures.
+
+### Change Detail
+- **Favorites & Categories**: Users can star entries and filter list items natively using category chips or the sliding sidebar navigation.
+- **Smart Search & Sort**: Integrated fuzzy tokenized search and multi-criteria bottom-sheet sorting.
+- **Password Generator & Diagnostics**: Built-in cryptographically-secure password generation and k-Anonymity HIBP vulnerability scanning.
+- **Security Hardening**: Isolated 2FA TOTP secret storage, SHA-256 integrity verification for OTA updates, and automated RAM scrubbing.
+
+### Key Files
+- `src/app/store.ts`
+- `src/app/components/PasswordList.tsx`
+- `src/app/components/Sidebar.tsx`
+- `src/app/components/SortModal.tsx`
+- `src/app/components/SecurityDashboard.tsx`
+- `src/app/components/PasswordGenerator.tsx`
+- `src/app/hooks/useSmartSearch.ts`
+- `src/app/hooks/useSort.ts`
+- `src/app/services/hibpCache.ts`
+- `src/app/services/updater.ts`

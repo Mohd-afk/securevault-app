@@ -5,7 +5,7 @@
 // Run after `vite build`: node scripts/release-ota.mjs
 // ─────────────────────────────────────────────────────────────────────
 
-import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync } from 'fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, renameSync } from 'fs';
 import archiver from 'archiver';
 import { join, resolve } from 'path';
 import { execSync } from 'child_process';
@@ -35,32 +35,33 @@ mkdirSync(OTA_DIR, { recursive: true });
 const zipPath = join(OTA_DIR, `${version}.zip`);
 
 // ─── 3. Zip the dist folder (preserving folder structure) ───────────────
-// IMPORTANT: Do NOT use Compress-Archive on Windows — it flattens assets/
-// subdirectory contents to the zip root, causing 404s when Capgo serves the
-// bundle. Use archiver which correctly preserves all subdirectories.
-console.log(`📦 Zipping dist/ → ota-updates/bundles/${version}.zip`);
+// Use the official Capgo CLI to create the bundle. This ensures 100% native
+// ZIP compatibility (correct compression/deflation) with the @capgo/capacitor-updater plugin on Android/iOS.
+console.log(`📦 Zipping dist/ using @capgo/cli...`);
 
-await new Promise((resolve, reject) => {
-  const output = createWriteStream(zipPath);
-  const archive = archiver('zip', { zlib: { level: 9 } });
+const appId = 'com.mohdj.securevault';
+const tempZipName = `${appId}_${version}.zip`;
+const tempZipPath = join(ROOT, tempZipName);
 
-  output.on('close', () => {
-    console.log(`   Archive size: ${(archive.pointer() / 1024 / 1024).toFixed(2)} MB`);
-    resolve();
-  });
-  archive.on('error', reject);
-  archive.pipe(output);
+// Clean up any stale temp files
+if (existsSync(tempZipPath)) {
+  unlinkSync(tempZipPath);
+}
 
-  // Add all dist/ contents, preserving the full directory structure.
-  // Exclude PDFs and other non-web assets that inflate the bundle.
-  archive.glob('**/*', {
-    cwd: DIST,
-    ignore: ['**/*.pdf', '**/*.map'],
-  });
-
-  archive.finalize();
-});
-console.log(`✅ Bundle created: ota-updates/bundles/${version}.zip\n`);
+try {
+  execSync(`npx @capgo/cli bundle zip ${appId} -p ./dist -b ${version} --no-code-check`, { stdio: 'inherit', cwd: ROOT });
+  
+  if (!existsSync(tempZipPath)) {
+    throw new Error(`Expected zip file not found at ${tempZipPath}`);
+  }
+  
+  // Move it to the target OTA folder
+  renameSync(tempZipPath, zipPath);
+  console.log(`✅ Bundle created and moved to: ota-updates/bundles/${version}.zip\n`);
+} catch (err) {
+  console.error('❌ Failed to create bundle zip with Capgo CLI:', err);
+  process.exit(1);
+}
 
 // ─── 4. Deploy to Firebase Hosting ──────────────────────────────────
 console.log(`🚀 Deploying to Firebase Hosting...`);

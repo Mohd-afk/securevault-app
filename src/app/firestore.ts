@@ -148,6 +148,43 @@ export function subscribeToVault(
 
 // ── Settings operations ──────────────────────────────────────────────
 
+function categoriesDocRef(uid: string) {
+    return doc(getFirebaseDb(), 'users', uid, 'data', 'categories');
+}
+
+export async function saveCategoriesToCloud(
+    uid: string,
+    categories: any[],
+): Promise<void> {
+    log.info('Saving categories to cloud', { uid });
+    await setDoc(categoriesDocRef(uid), {
+        categories: JSON.stringify(categories),
+        updatedAt: serverTimestamp(),
+    });
+    log.debug('Categories saved to cloud', { uid });
+}
+
+export async function loadCategoriesFromCloud(
+    uid: string,
+): Promise<any[] | null> {
+    log.debug('Loading categories from cloud', { uid });
+    const snap = await getDoc(categoriesDocRef(uid));
+    if (!snap.exists()) {
+        log.debug('No categories document found in cloud', { uid });
+        return null;
+    }
+
+    const data = snap.data();
+    log.info('Categories loaded from cloud', { uid });
+    if (data.categories) {
+        return JSON.parse(data.categories);
+    }
+    if (data.encryptedPayload) {
+        return JSON.parse(data.encryptedPayload);
+    }
+    return null;
+}
+
 export async function saveSettingsToCloud(
     uid: string,
     settings: AppSettings,
@@ -185,10 +222,11 @@ export async function loadSettingsFromCloud(
  */
 export async function deleteCloudVault(uid: string): Promise<void> {
     log.warn('Deleting cloud vault data', { uid });
-    // Delete vault and settings subdocuments (NOT the parent user doc)
+    // Delete vault, settings, and categories subdocuments (NOT the parent user doc)
     const batch = writeBatch(getFirebaseDb());
     batch.delete(vaultDocRef(uid));
     batch.delete(settingsDocRef(uid));
+    batch.delete(categoriesDocRef(uid));
     await batch.commit();
     log.info('Cloud vault data deleted successfully', { uid });
 }

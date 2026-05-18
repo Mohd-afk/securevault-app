@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useLocation } from 'react-router';
 import { ArrowLeft, Eye, EyeOff, ChevronDown, Star } from 'lucide-react';
-import { addVaultItem, getVaultItem, updateVaultItem, encryptTotpSecret, decryptTotpSecret, type ItemType } from '../store';
+import { addVaultItem, getVaultItem, updateVaultItem, encryptTotpSecret, decryptTotpSecret, type ItemType, type CustomCategory, subscribeToCustomCategories } from '../store';
 import { toast } from 'sonner';
 
 const itemTypes: ItemType[] = ['Website', 'App', 'Phone', 'Door Lock', 'Card', 'Other'];
@@ -11,6 +11,7 @@ export function AddEditForm() {
   const [saveError, setSaveError] = useState('');
   const navigate = useNavigate();
   const { id } = useParams();
+  const location = useLocation();
   const isEdit = !!id;
 
   const [title, setTitle] = useState('');
@@ -25,10 +26,41 @@ export function AddEditForm() {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   
+  // Custom Category State
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+
   // Smart Categorization State
   const [suggestedTag, setSuggestedTag] = useState<string | null>(null);
   const [hasAutoCategorized, setHasAutoCategorized] = useState(false);
   const [labels, setLabels] = useState<string[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeToCustomCategories((categories) => {
+      setCustomCategories(categories);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const prefilledCategory = location.state?.prefilledCategory;
+    if (!isEdit && prefilledCategory) {
+      if (prefilledCategory.startsWith('cat_')) {
+        setSelectedCategoryId(prefilledCategory);
+      } else {
+        if (prefilledCategory === 'passwords') {
+          setType('Website');
+        } else if (prefilledCategory === 'cards') {
+          setType('Card');
+        } else if (prefilledCategory === 'devices') {
+          setType('Phone');
+        } else if (prefilledCategory === 'notes' || prefilledCategory === 'ids' || prefilledCategory === 'docs') {
+          setType('Other');
+        }
+      }
+    }
+  }, [location.state, isEdit]);
 
   useEffect(() => {
     if (id) {
@@ -41,6 +73,7 @@ export function AddEditForm() {
         setUrl(item.url);
         setNote(item.note);
         setIsFavorite(item.isFavorite || false);
+        setSelectedCategoryId(item.categoryId || '');
         // Decrypt TOTP secret from separate encrypted context
         if (item.totpSecretEncrypted) {
           decryptTotpSecret(item.totpSecretEncrypted)
@@ -116,6 +149,7 @@ export function AddEditForm() {
         labels: finalLabels.length > 0 ? finalLabels : undefined,
         totpSecretEncrypted,
         totpSecret: undefined, // Never store raw TOTP in vault blob
+        categoryId: selectedCategoryId || undefined,
       };
 
       if (isEdit && id) {
@@ -176,6 +210,47 @@ export function AddEditForm() {
                     className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors ${t === type ? 'text-cyan-400 bg-white/5' : 'text-white'}`}
                   >
                     {t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Category Selector */}
+        <div>
+          <label className="text-gray-400 text-xs mb-1.5 block">Category</label>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+              className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white text-left flex items-center justify-between focus:outline-none focus:border-cyan-500/50"
+            >
+              <span>
+                {selectedCategoryId
+                  ? customCategories.find((c) => c.id === selectedCategoryId)?.name || 'Default'
+                  : 'Default (No Custom Category)'}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showCategoryDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-[#16213e] border border-gray-700/50 rounded-xl overflow-hidden z-20 shadow-xl max-h-60 overflow-y-auto">
+                <button
+                  type="button"
+                  onClick={() => { setSelectedCategoryId(''); setShowCategoryDropdown(false); }}
+                  className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors ${!selectedCategoryId ? 'text-cyan-400 bg-white/5' : 'text-white'}`}
+                >
+                  Default (No Custom Category)
+                </button>
+                {customCategories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => { setSelectedCategoryId(cat.id); setShowCategoryDropdown(false); }}
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors flex items-center gap-2 ${cat.id === selectedCategoryId ? 'text-cyan-400 bg-white/5' : 'text-white'}`}
+                  >
+                    <span style={{ color: cat.color }}>●</span>
+                    <span>{cat.name}</span>
                   </button>
                 ))}
               </div>

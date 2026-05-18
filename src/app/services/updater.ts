@@ -89,6 +89,7 @@ interface VersionMetadata {
   checksum?: string;
   releaseNotes?: string;
   minAppVersion?: string;
+  min_apk_version?: string; // Mapped from Firestore config
   releasedAt?: string;
 }
 
@@ -159,6 +160,20 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
     log.warn('[OTA MIGRATION] Could not read native version for check. Skipping migration guard.', e);
   }
 
+  // ── ONE-TIME BLACKLIST RESET ───────────────────────────────────────────
+  // Clear the failed versions list once on boot to give devices that got
+  // stuck on blacklisted rollbacks a fresh opportunity to pull the v4.0.2 bundle.
+  try {
+    const didClearFailedVersions = localStorage.getItem('sv_ota_cleared_failed_versions_v402');
+    if (!didClearFailedVersions) {
+      localStorage.removeItem(FAILED_VERSIONS_KEY);
+      localStorage.setItem('sv_ota_cleared_failed_versions_v402', 'true');
+      log.info('[OTA_EVENT: failed_versions_cleared] Cleared failed versions blacklist for 4.0.2 migration.');
+    }
+  } catch (e) {
+    log.warn('Could not run one-time failed versions clear:', e);
+  }
+
   // Verification step: check if we just rebooted from an update
   try {
     const pendingVersion = localStorage.getItem(PENDING_VERSION_KEY);
@@ -184,14 +199,18 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
       if (pendingVersion) localStorage.setItem(ACTIVE_VERSION_KEY, pendingVersion);
       localStorage.removeItem(PENDING_VERSION_KEY);
       localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
-    } else if (isBuiltin) {
+    } else {
+      // Rollback or mismatch detected!
       if (pendingBundleId || pendingVersion) {
-        log.warn(`OTA update failed or was cleared. Capgo is on 'builtin'. Clearing any pending state to prevent false success loops.`);
+        log.warn(
+          `OTA update failed or was cleared. Bundle mismatch (expected ${pendingBundleId}, got ${currentBundleId}). ` +
+          `Clearing pending state to prevent false success loops.`
+        );
         if (pendingVersion) addFailedVersion(pendingVersion);
-        log.warn(`[OTA_EVENT: rollback_detected] Version ${pendingVersion || 'unknown'} failed to boot native bundle. Recorded as failed.`);
+        log.warn(`[OTA_EVENT: rollback_detected] Version ${pendingVersion || 'unknown'} failed to boot. Recorded as failed.`);
         localStorage.removeItem(PENDING_VERSION_KEY);
         localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
-      } else {
+      } else if (isBuiltin) {
         // ── POISON CLEAR ─────────────────────────────────────────────────
         // We are on builtin with no pending download — a clean boot.
         // Clear ACTIVE_VERSION_KEY so the next update check sees 0.0.0
@@ -204,8 +223,6 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
           localStorage.removeItem(FAILED_VERSIONS_KEY);
         }
       }
-    } else if (!bundleIdMatch) {
-      log.warn(`Bundle mismatch. Expected ${pendingBundleId}, got ${currentBundleId}. Not promoting pending version.`);
     }
 
   } catch (e) {
@@ -249,7 +266,8 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   }
 
   // 2.5 Ensure native minimum app version requirements are met
-  if (remote.minAppVersion) {
+  const minAppVersionRequired = remote.min_apk_version || remote.minAppVersion;
+  if (minAppVersionRequired) {
     try {
       let nativeVersion: string;
       try {
@@ -258,12 +276,12 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
       } catch(e) {
         nativeVersion = (await App.getInfo()).version;
       }
-      if (compareVersions(nativeVersion, remote.minAppVersion) < 0) {
-        log.warn(`[OTA_EVENT: check_failed] Remote update requires minAppVersion ${remote.minAppVersion}, but native app is ${nativeVersion}. Skipping.`);
+      if (compareVersions(nativeVersion, minAppVersionRequired) < 0) {
+        log.warn(`[OTA_EVENT: check_failed] Remote update requires minAppVersion/min_apk_version ${minAppVersionRequired}, but native app is ${nativeVersion}. Skipping.`);
         return;
       }
     } catch (e) {
-      log.warn('Could not check native version for minAppVersion enforcement', e);
+      log.warn('Could not check native version for minAppVersion/min_apk_version enforcement', e);
     }
   }
 
@@ -306,11 +324,17 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
   log.info(`[OTA_EVENT: downloading] Silent background download from: ${remote.url}`);
 
   try {
-    // Download the zip bundle silently — no UI shown during this
-    const bundle = await CapacitorUpdater.download({
+    // Download the zip bundle silently — passing checksum if available to ensure Capgo bundle validation passes
+    const downloadParams: any = {
       url: remote.url,
       version: remote.version,
-    });
+    };
+    if (remote.checksum) {
+      downloadParams.checksum = remote.checksum;
+    }
+    
+    log.info('[OTA_EVENT: downloading] Invoking CapacitorUpdater.download', downloadParams);
+    const bundle = await CapacitorUpdater.download(downloadParams);
 
     log.info(`[OTA_EVENT: downloaded] Bundle ready: ${bundle.id}`);
 
@@ -329,14 +353,10 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
 
     log.info(`[OTA_EVENT: staged] Bundle ${bundle.id} staged. Will apply on next app restart.`);
 
-    // Notify the user with a single non-intrusive toast from the bottom.
-    toast('🔄 New version downloaded', {
-      description: 'Please restart the app to apply the update.',
+    // Notify the user with a single non-intrusive toast from the bottom center exactly as requested
+    toast('New version downloaded. Please restart to see the changes.', {
       duration: 8000,
-      action: {
-        label: 'Later',
-        onClick: () => {},
-      },
+      position: 'bottom-center',
     });
 
   } catch (err) {

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare, Tag, Plus, ArrowUp, ArrowDown, Palette } from 'lucide-react';
 import packageJson from '../../../package.json';
-import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability, isAutofillEnabled } from '../store';
+import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability, isAutofillEnabled, subscribeToCustomCategories, addCustomCategory, updateCustomCategory, deleteCustomCategory, reorderCustomCategories, type CustomCategory } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
 import { subscribeToDevices, revokeDevice, revokeAllOtherDevices, type DeviceSession, getLocalDeviceId } from '../services/deviceSession';
@@ -103,6 +103,7 @@ export function Settings() {
         account: true,
         security: true,
         devices: true,
+        categories: false,
         autolock: true,
         autofill: true,
         data: true,
@@ -272,6 +273,75 @@ export function Settings() {
     const handleRemoveBlockedSite = (siteToRemove: string) => {
         const currentBlocklist = settings.autofillBlocklist || [];
         updateSetting('autofillBlocklist', currentBlocklist.filter(s => s !== siteToRemove));
+    };
+
+    // ── Custom Categories State & Handlers ──────────────────────────
+    const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [newCategoryColor, setNewCategoryColor] = useState('#3b82f6');
+    const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+    const [editingName, setEditingName] = useState('');
+    const [editingColor, setEditingColor] = useState('');
+
+    useEffect(() => {
+        const unsub = subscribeToCustomCategories((categories) => {
+            setCustomCategories(categories);
+        });
+        return unsub;
+    }, []);
+
+    const handleAddCategory = async () => {
+        if (!newCategoryName.trim()) return;
+        try {
+            await addCustomCategory({
+                name: newCategoryName.trim(),
+                color: newCategoryColor,
+            });
+            setNewCategoryName('');
+            toast.success('Category added successfully!');
+        } catch (e) {
+            toast.error('Failed to add category');
+        }
+    };
+
+    const handleSaveEditCategory = async (id: string) => {
+        if (!editingName.trim()) return;
+        try {
+            await updateCustomCategory(id, {
+                name: editingName.trim(),
+                color: editingColor,
+            });
+            setEditingCategoryId(null);
+            toast.success('Category updated!');
+        } catch (e) {
+            toast.error('Failed to update category');
+        }
+    };
+
+    const handleDeleteCategory = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this category? Passwords in this category will not be deleted.')) return;
+        try {
+            await deleteCustomCategory(id);
+            toast.success('Category deleted!');
+        } catch (e) {
+            toast.error('Failed to delete category');
+        }
+    };
+
+    const handleMoveCategory = async (idx: number, direction: 'up' | 'down') => {
+        const nextIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (nextIdx < 0 || nextIdx >= customCategories.length) return;
+        
+        const ordered = [...customCategories];
+        const temp = ordered[idx];
+        ordered[idx] = ordered[nextIdx];
+        ordered[nextIdx] = temp;
+        
+        try {
+            await reorderCustomCategories(ordered.map(c => c.id));
+        } catch (e) {
+            toast.error('Failed to reorder categories');
+        }
     };
 
     // Username state
@@ -1079,6 +1149,170 @@ export function Settings() {
                             </button>
                         </div>
                     </div>
+                    )}
+                </div>
+
+                {/* Vault Categories Management Section */}
+                <div>
+                    <button 
+                        onClick={() => toggleCategory('categories')}
+                        className="w-full flex justify-between items-center py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group mb-1"
+                    >
+                        <span className="text-gray-500 text-xs uppercase tracking-wider block">Vault Categories</span>
+                        {expandedCategories.categories ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                    {expandedCategories.categories && (
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+                            <p className="text-gray-400 text-xs leading-relaxed">
+                                Customize your vault with custom categories to keep your passwords, notes, and documents organized exactly the way you want.
+                            </p>
+
+                            {/* Categories List */}
+                            <div className="space-y-2.5">
+                                {customCategories.length > 0 ? (
+                                    customCategories.map((cat, idx) => (
+                                        <div 
+                                            key={cat.id} 
+                                            className="flex items-center justify-between bg-[#1a1a2e] rounded-xl p-3 border border-white/5 group hover:border-cyan-500/20 transition-all duration-300"
+                                        >
+                                            {editingCategoryId === cat.id ? (
+                                                <div className="flex-1 space-y-2.5 mr-2">
+                                                    <input
+                                                        type="text"
+                                                        value={editingName}
+                                                        onChange={(e) => setEditingName(e.target.value)}
+                                                        placeholder="Category name"
+                                                        className="w-full bg-[#16213e] border border-cyan-500/30 rounded-lg py-1.5 px-3 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                                                    />
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        {['#3b82f6', '#ec4899', '#eab308', '#10b981', '#8b5cf6', '#f43f5e', '#14b8a6', '#f97316'].map((color) => (
+                                                            <button
+                                                                key={color}
+                                                                type="button"
+                                                                onClick={() => setEditingColor(color)}
+                                                                className={`w-6 h-6 rounded-full border transition-all ${editingColor === color ? 'scale-110 border-white ring-2 ring-cyan-500/50' : 'border-transparent opacity-80 hover:opacity-100'}`}
+                                                                style={{ backgroundColor: color }}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => handleSaveEditCategory(cat.id)}
+                                                            className="flex-1 py-1.5 px-3 bg-cyan-500 text-black text-xs font-semibold rounded-lg hover:bg-cyan-400 transition-colors"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setEditingCategoryId(null)}
+                                                            className="flex-1 py-1.5 px-3 bg-white/5 border border-white/10 text-white text-xs font-semibold rounded-lg hover:bg-white/10 transition-colors"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div 
+                                                            className="w-2.5 h-2.5 rounded-full shadow-sm" 
+                                                            style={{ backgroundColor: cat.color || '#3b82f6' }}
+                                                        />
+                                                        <span className="text-white text-sm font-medium">{cat.name}</span>
+                                                    </div>
+                                                    
+                                                    <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                        {/* Reorder Up */}
+                                                        <button
+                                                            disabled={idx === 0}
+                                                            onClick={() => handleMoveCategory(idx, 'up')}
+                                                            className="p-1 rounded-md hover:bg-white/5 text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                                                        >
+                                                            <ArrowUp className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        
+                                                        {/* Reorder Down */}
+                                                        <button
+                                                            disabled={idx === customCategories.length - 1}
+                                                            onClick={() => handleMoveCategory(idx, 'down')}
+                                                            className="p-1 rounded-md hover:bg-white/5 text-gray-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                                                        >
+                                                            <ArrowDown className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        
+                                                        {/* Edit */}
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingCategoryId(cat.id);
+                                                                setEditingName(cat.name);
+                                                                setEditingColor(cat.color || '#3b82f6');
+                                                            }}
+                                                            className="p-1 rounded-md hover:bg-white/5 text-gray-400 hover:text-cyan-400 transition-colors"
+                                                        >
+                                                            <Pencil className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        
+                                                        {/* Delete */}
+                                                        <button
+                                                            onClick={() => handleDeleteCategory(cat.id)}
+                                                            className="p-1 rounded-md hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="text-center py-6 bg-[#1a1a2e] rounded-xl border border-white/5 text-gray-500 text-xs">
+                                        No custom categories created yet.
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Create New Category Form */}
+                            <div className="pt-4 border-t border-white/5 space-y-3">
+                                <span className="text-white text-xs font-semibold block">Create Custom Category</span>
+                                <div className="space-y-3">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={newCategoryName}
+                                            onChange={(e) => setNewCategoryName(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                                            placeholder="Category name (e.g., Work, Personal)"
+                                            className="flex-1 bg-[#1a1a2e] border border-gray-700/50 rounded-xl py-2 px-3 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-cyan-500/50 transition-colors"
+                                        />
+                                        <button
+                                            onClick={handleAddCategory}
+                                            className="px-4 bg-cyan-500 text-black text-sm font-semibold rounded-xl hover:bg-cyan-400 transition-colors flex items-center justify-center gap-1"
+                                        >
+                                            <Plus className="w-4 h-4" /> Add
+                                        </button>
+                                    </div>
+
+                                    {/* Color Picker Grid */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-400 text-xs">Theme:</span>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            {['#3b82f6', '#ec4899', '#eab308', '#10b981', '#8b5cf6', '#f43f5e', '#14b8a6', '#f97316'].map((color) => (
+                                                <button
+                                                    key={color}
+                                                    type="button"
+                                                    onClick={() => setNewCategoryColor(color)}
+                                                    className={`w-6 h-6 rounded-full border transition-all ${newCategoryColor === color ? 'scale-110 border-white ring-2 ring-cyan-500/50' : 'border-transparent opacity-80 hover:opacity-100'}`}
+                                                    style={{ backgroundColor: color }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     )}
                 </div>
 

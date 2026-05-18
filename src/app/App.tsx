@@ -41,21 +41,32 @@ export default function App() {
         }
       }
 
+      // Helper function to race a promise against a timeout
+      const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, name: string): Promise<T> => {
+        return new Promise<T>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            reject(new Error(`Timeout of ${timeoutMs}ms exceeded for: ${name}`));
+          }, timeoutMs);
+          promise.then(
+            (res) => { clearTimeout(timer); resolve(res); },
+            (err) => { clearTimeout(timer); reject(err); }
+          );
+        });
+      };
+
       // ─────────────────────────────────────────────────────────────────
       // STEP 2: Initialize Firebase.
-      // Wrapped in try/catch — failure must NOT prevent render.
+      // Wrapped in a 3.0s timeout — failure/timeout must NOT prevent render.
       // ─────────────────────────────────────────────────────────────────
       _bm('BOOT_MARK_4_before_firebase');
       try {
-        await initFirebase();
+        await withTimeout(initFirebase(), 3000, 'initFirebase');
         _bm('BOOT_MARK_5_firebase_ok');
         console.log('[BOOT] Firebase initialized');
-      } catch (err) {
-        _bm('BOOT_MARK_5_firebase_FAILED: ' + String(err));
-        console.error('[BOOT] Firebase init failed:', err);
-        setBootError('Firebase initialization failed. Some features may be unavailable.');
-        setBootComplete(true);
-        return;
+      } catch (err: any) {
+        _bm('BOOT_MARK_5_firebase_FAILED_OR_TIMEOUT: ' + String(err));
+        console.warn('[BOOT] Firebase init failed or timed out (falling back to offline-first):', err);
+        // Do NOT block render on Firebase failure
       }
 
       // ─────────────────────────────────────────────────────────────────
